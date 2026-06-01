@@ -1,6 +1,5 @@
 <template>
   <div class="layout">
-    <!-- 左侧上传 -->
     <div class="upload-panel">
       <h2>上传文档</h2>
 
@@ -11,7 +10,6 @@
       <p>{{ msg }}</p>
     </div>
 
-    <!-- 右侧文档列表 -->
     <div class="doc-panel">
       <h3>已上传文档</h3>
 
@@ -21,63 +19,66 @@
 
       <ul>
         <li v-for="doc in docs" :key="doc.id" class="doc-item">
-  <div class="name">📄 {{ doc.filename }}</div>
+          <div class="name">📄 {{ doc.filename }}</div>
 
-  <div class="meta">
-    <span>📦 {{ doc.size }}</span>
-    <span>🕒 {{ formatToCNTime(doc.created_at) }}</span>
-    <button class="del-btn" @click="removeDoc(doc.id)">
-      删除
-    </button>
-  </div>
-</li>
+          <div class="meta">
+            <span>📦 {{ doc.size }}</span>
+            <span>🕒 {{ formatToCNTime(doc.created_at) }}</span>
+            <button class="del-btn" @click="removeDoc(doc.id)">
+              删除
+            </button>
+          </div>
+        </li>
       </ul>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { uploadDocument, getDocuments } from '../api/document'
+import { ref, watch } from 'vue'
+import { uploadDocument, getDocuments, deleteDocument } from '../api/document'
 import { formatToCNTime } from '../utils/time'
-import { deleteDocument } from '../api/document'
 
-const removeDoc = async (id) => {
-  await deleteDocument(id)
-  await loadDocs()
-}
-  
+const props = defineProps({
+  knowledgeBaseId: {
+    type: Number,
+    required: true,
+  },
+})
+
 const file = ref(null)
 const msg = ref('')
 const docs = ref([])
 
 const loadDocs = async () => {
-  docs.value = await getDocuments()
+  docs.value = await getDocuments(props.knowledgeBaseId)
 }
 
-onMounted(() => {
-  loadDocs()
-})
+watch(
+  () => props.knowledgeBaseId,
+  () => {
+    loadDocs()
+  },
+  { immediate: true },
+)
 
 const onFileChange = (e) => {
   file.value = e.target.files[0]
 }
 
-  const removeDocFunc = async (id) => {
-    await deleteDocument(id)
-    await loadDocs()
-} 
+const removeDoc = async (id) => {
+  await deleteDocument(id)
+  await loadDocs()
+}
 
 const upload = async () => {
   if (!file.value) return
   msg.value = '上传中...'
   try {
-    await uploadDocument(file.value)
+    await uploadDocument(file.value, props.knowledgeBaseId)
     msg.value = '上传成功'
-
-    // 🔥 上传后刷新列表
     await loadDocs()
-  } catch (e) {
+  } catch {
     msg.value = '上传失败'
   }
 }
@@ -89,14 +90,12 @@ const upload = async () => {
   height: 100%;
 }
 
-/* 左侧 */
 .upload-panel {
   width: 40%;
   padding: 20px;
   border-right: 1px solid #eee;
 }
 
-/* 右侧 */
 .doc-panel {
   width: 60%;
   padding: 20px;
@@ -112,6 +111,7 @@ li {
   padding: 10px;
   border-bottom: 1px solid #eee;
 }
+
 .del-btn {
   margin-left: auto;
   padding: 4px 8px;

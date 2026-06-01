@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 import ChatView from '@/views/ChatView.vue'
-import UploadView from '@/views/DocumentUpload.vue'
+import KnowledgeBaseView from '@/views/KnowledgeBaseView.vue'
 import LoginView from '@/views/LoginView.vue'
 import RegisterView from '@/views/RegisterView.vue'
 import { fetchMe } from '@/api/auth'
@@ -35,9 +35,9 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
-      path: '/upload',
-      name: 'upload',
-      component: UploadView,
+      path: '/knowledge',
+      name: 'knowledge',
+      component: KnowledgeBaseView,
       meta: { requiresAuth: true },
     },
   ],

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
@@ -10,6 +10,7 @@ from app.models.document import Document
 from app.models.user import User
 from app.services.document_service import save_file
 from app.services.ingest_service import process_document
+from app.services.knowledge_base_service import get_user_knowledge_base
 from app.services.vector_service import delete_document_vectors
 
 router = APIRouter()
@@ -18,14 +19,19 @@ router = APIRouter()
 @router.post("/documents/upload")
 def upload_document(
     file: UploadFile = File(...),
+    knowledge_base_id: int = Query(..., description="目标知识库 ID"),
     db: Session = Depends(get_db),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     current_user: User = Depends(get_current_user),
 ):
+    kb = get_user_knowledge_base(db, knowledge_base_id, current_user.id)
+    if not kb:
+        raise HTTPException(status_code=404, detail="知识库不存在")
+
     exists = (
         db.query(Document)
         .filter(
-            Document.user_id == current_user.id,
+            Document.knowledge_base_id == knowledge_base_id,
             Document.filename == file.filename,
         )
         .first()
@@ -34,13 +40,14 @@ def upload_document(
     if exists:
         raise HTTPException(
             status_code=400,
-            detail=f"文件 [{file.filename}] 已存在",
+            detail=f"文件 [{file.filename}] 在该知识库中已存在",
         )
 
-    object_name, size = save_file(file, current_user.id)
+    object_name, size = save_file(file, current_user.id, knowledge_base_id)
 
     doc = Document(
         user_id=current_user.id,
+        knowledge_base_id=knowledge_base_id,
         filename=file.filename,
         path=object_name,
         size=size,
@@ -55,22 +62,29 @@ def upload_document(
         doc.id,
         object_name,
         current_user.id,
+        knowledge_base_id,
     )
     return {
         "id": doc.id,
         "filename": doc.filename,
         "path": doc.path,
+        "knowledge_base_id": knowledge_base_id,
     }
 
 
 @router.get("/documents")
 def get_documents(
+    knowledge_base_id: int = Query(..., description="知识库 ID"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    kb = get_user_knowledge_base(db, knowledge_base_id, current_user.id)
+    if not kb:
+        raise HTTPException(status_code=404, detail="知识库不存在")
+
     docs = (
         db.query(Document)
-        .filter(Document.user_id == current_user.id)
+        .filter(Document.knowledge_base_id == knowledge_base_id)
         .order_by(Document.created_at.desc())
         .all()
     )
@@ -80,6 +94,7 @@ def get_documents(
             "filename": doc.filename,
             "size": format_size(doc.size),
             "created_at": format_time(doc.created_at),
+            "knowledge_base_id": doc.knowledge_base_id,
         }
         for doc in docs
     ]
@@ -103,13 +118,14 @@ def delete_document(
     if not doc:
         raise HTTPException(status_code=404, detail="文档不存在")
 
+    kb_id = doc.knowledge_base_id
     db.delete(doc)
     db.commit()
     minio_client.remove_object(
         bucket_name=settings.MINIO_BUCKET,
         object_name=doc.path,
     )
-    delete_document_vectors(doc_id, current_user.id)
+    delete_document_vectors(doc_id, kb_id)
 
     return {"message": "deleted", "id": doc_id}
 

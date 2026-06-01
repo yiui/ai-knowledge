@@ -4,8 +4,8 @@
       <div class="title">AI Knowledge Base</div>
       <div class="nav-right">
         <span class="username">{{ user?.username }}</span>
-        <button class="nav-btn" @click="goUpload">上传文档</button>
-        <button class="nav-btn" @click="goChat">知识库问答</button>
+        <button class="nav-btn" @click="goKnowledge">知识库管理</button>
+        <button class="nav-btn" @click="goChat">对话</button>
         <button class="logout-btn" @click="handleLogout">退出</button>
       </div>
     </header>
@@ -23,8 +23,8 @@ import { clearAuth, getUser, isLoggedIn } from '@/stores/auth'
 const router = useRouter()
 const user = computed(() => getUser())
 
-const goUpload = () => {
-  router.push('/upload')
+const goKnowledge = () => {
+  router.push('/knowledge')
 }
 
 const goChat = () => {

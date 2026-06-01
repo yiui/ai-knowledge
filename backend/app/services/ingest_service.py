@@ -9,6 +9,7 @@ def process_document(
     document_id: int,
     file_path: str,
     user_id: int,
+    knowledge_base_id: int,
 ):
     local_path = download_from_minio(file_path)
 
@@ -19,5 +20,6 @@ def process_document(
     for chunk in chunks:
         chunk.metadata["document_id"] = document_id
         chunk.metadata["user_id"] = str(user_id)
+        chunk.metadata["knowledge_base_id"] = str(knowledge_base_id)
 
     vector_store.add_documents(documents=chunks)

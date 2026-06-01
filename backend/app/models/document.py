@@ -9,13 +9,23 @@ from app.db.base import Base
 class Document(Base):
     __tablename__ = "documents"
     __table_args__ = (
-        UniqueConstraint("user_id", "filename", name="uq_documents_user_filename"),
+        UniqueConstraint(
+            "knowledge_base_id",
+            "filename",
+            name="uq_documents_kb_filename",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    knowledge_base_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("knowledge_bases.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )

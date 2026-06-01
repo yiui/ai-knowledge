@@ -3,9 +3,13 @@ import { getToken } from '@/stores/auth'
 
 import { http } from './http'
 
-export const chatApi = async (question: string) => {
+export const chatApi = async (
+  question: string,
+  knowledgeBaseId?: number | null,
+) => {
   const res = await http.post('/chat', {
     question,
+    knowledge_base_id: knowledgeBaseId ?? null,
   })
 
   return res.data
@@ -14,6 +18,7 @@ export const chatApi = async (question: string) => {
 export const chatStreamApi = async (
   question: string,
   onChunk: (text: string) => void,
+  knowledgeBaseId?: number | null,
 ): Promise<void> => {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   const token = getToken()
@@ -24,7 +29,10 @@ export const chatStreamApi = async (
   const response = await fetch(`${API_BASE_URL}/chat/stream`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({
+      question,
+      knowledge_base_id: knowledgeBaseId ?? null,
+    }),
   })
 
   if (!response.ok) {
@@ -61,6 +69,6 @@ export const chatStreamApi = async (
   }
 }
 
-export function search(query: string) {
-  return http.post('/search', { query })
+export function search(query: string, knowledgeBaseId: number) {
+  return http.post('/search', { query, knowledge_base_id: knowledgeBaseId })
 }

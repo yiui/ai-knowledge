@@ -4,7 +4,7 @@ from app.db.base import Base
 from app.db.session import engine
 
 # 导入模型（关键，不然不会建表）
-from app.models import document, user  # noqa: F401
+from app.models import document, knowledge_base, user  # noqa: F401
 
 
 def _migrate_users_table() -> None:
@@ -27,7 +27,7 @@ def _migrate_documents_table() -> None:
         return
 
     columns = {col["name"] for col in inspector.get_columns("documents")}
-    if "user_id" in columns:
+    if "knowledge_base_id" in columns:
         return
 
     with engine.begin() as conn:
