@@ -6,12 +6,9 @@ from app.services.vector_service import search_similar
 
 class ChatService:
 
-    def _build_prompt(self, question: str, *, stream: bool = False) -> tuple[str, list]:
-        docs = search_similar(question, k=4)
-        for doc in docs:
-            print("doc:",doc.metadata, doc.page_content)
+    def _build_prompt(self, question: str, user_id: int, *, stream: bool = False) -> tuple[str, list]:
+        docs = search_similar(question, user_id=user_id, k=4)
         context = "\n\n".join([d.page_content for d in docs])
-        # print("context:", context)
         if stream:
             prompt = f"""
 你是企业知识库助手。
@@ -42,8 +39,8 @@ class ChatService:
 """
         return prompt, docs
 
-    def chat(self, question: str):
-        prompt, docs = self._build_prompt(question)
+    def chat(self, question: str, user_id: int):
+        prompt, docs = self._build_prompt(question, user_id)
         answer = ask_llm(prompt)
 
         return {
@@ -51,6 +48,6 @@ class ChatService:
             "sources": [d.page_content for d in docs],
         }
 
-    def chat_stream(self, question: str) -> Iterator[str]:
-        prompt, _docs = self._build_prompt(question, stream=True)
+    def chat_stream(self, question: str, user_id: int) -> Iterator[str]:
+        prompt, _docs = self._build_prompt(question, user_id, stream=True)
         yield from stream_llm(prompt)

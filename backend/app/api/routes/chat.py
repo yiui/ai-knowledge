@@ -12,17 +12,17 @@ chat_service = ChatService()
 
 
 @router.post("/chat")
-def chat(payload: dict, _: User = Depends(get_current_user)):
+def chat(payload: dict, current_user: User = Depends(get_current_user)):
     question = payload["question"]
-    return chat_service.chat(question)
+    return chat_service.chat(question, user_id=current_user.id)
 
 
 @router.post("/chat/stream")
-def chat_stream(request: dict, _: User = Depends(get_current_user)):
+def chat_stream(request: dict, current_user: User = Depends(get_current_user)):
     question = request["question"]
 
     def event_generator():
-        for chunk in chat_service.chat_stream(question):
+        for chunk in chat_service.chat_stream(question, user_id=current_user.id):
             yield f"data: {json.dumps({'text': chunk})}\n\n"
 
         yield "data: [DONE]\n\n"
