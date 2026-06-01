@@ -16,7 +16,7 @@ def parse_pdf(file_path: str) -> list[str]:
 
     # 3. 最终兜底过滤
     pages = [p.strip() for p in pages if p and p.strip()]
-
+    print("parse over")
     return pages
 
 
