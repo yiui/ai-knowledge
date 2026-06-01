@@ -8,6 +8,7 @@ from app.api.routes.chat import router as chat_router
 from app.api.routes.search import router as search_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.knowledge_bases import router as kb_router
+from app.api.routes.conversations import router as conversations_router
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
@@ -26,6 +27,7 @@ app.include_router(auth_router)
 app.include_router(kb_router)
 app.include_router(doc_router)
 app.include_router(chat_router)
+app.include_router(conversations_router)
 app.include_router(search_router)
 @app.on_event("startup")
 def on_startup():
@@ -61,4 +63,7 @@ async def config():
         "version": settings.APP_VERSION,
         "debug": settings.DEBUG,
         "llm": llm_config,
+        "chat": {
+            "max_messages_per_conversation": settings.CHAT_MAX_MESSAGES,
+        },
     }

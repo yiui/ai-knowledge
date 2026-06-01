@@ -4,7 +4,7 @@ from app.db.base import Base
 from app.db.session import engine
 
 # 导入模型（关键，不然不会建表）
-from app.models import document, knowledge_base, user  # noqa: F401
+from app.models import conversation, document, knowledge_base, message, user  # noqa: F401
 
 
 def _migrate_users_table() -> None:

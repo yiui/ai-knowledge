@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     VECTOR_RECALL_K: int = 20
     RERANK_TOP_K: int = 4
 
+    CHAT_MAX_MESSAGES: int = 50
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

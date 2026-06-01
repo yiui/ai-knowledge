@@ -33,10 +33,12 @@ class ChatService:
             question,
             user_id=user_id,
             knowledge_base_id=knowledge_base_id,
-            k=4,
+            k=2,
         )
+        print("提问:", question)
         for doc in docs:
             print("召回结果:", doc.page_content)
+            print("-" * 100)
         context = "\n\n".join([d.page_content for d in docs])
         if stream:
             prompt = f"""
@@ -104,4 +106,5 @@ class ChatService:
                 knowledge_base_id,
                 stream=True,
             )
+            print("prompt:", prompt)
         yield from stream_llm(prompt)
