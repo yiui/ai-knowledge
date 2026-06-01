@@ -1,0 +1,59 @@
+import { API_BASE_URL } from '@/config'
+
+import { http } from './http'
+
+export const chatApi = async (question: string) => {
+  const res = await http.post('/chat', {
+    question,
+  })
+
+  return res.data
+}
+
+export const chatStreamApi = async (
+  question: string,
+  onChunk: (text: string) => void,
+): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/chat/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Chat stream failed: ${response.status}`)
+  }
+
+  const reader = response.body?.getReader()
+  if (!reader) {
+    throw new Error('No response body')
+  }
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue
+
+      const data = line.slice(6).trim()
+      if (data === '[DONE]') return
+
+      const parsed = JSON.parse(data) as { text?: string }
+      if (parsed.text) {
+        onChunk(parsed.text)
+      }
+    }
+  }
+}
+
+export function search(query: string) {
+  return http.post('/search', { query })
+}
