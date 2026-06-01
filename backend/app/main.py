@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from app.api.routes.llm import router as llm_router
 from app.api.routes.documents import router as doc_router
 from app.core.config import settings
+from app.core.upload import upload_limits_payload
 from fastapi.middleware.cors import CORSMiddleware 
 from app.api.routes.chat import router as chat_router
 from app.api.routes.search import router as search_router
@@ -66,4 +67,5 @@ async def config():
         "chat": {
             "max_messages_per_conversation": settings.CHAT_MAX_MESSAGES,
         },
+        "upload": upload_limits_payload(),
     }

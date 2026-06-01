@@ -43,7 +43,13 @@ def upload_document(
             detail=f"文件 [{file.filename}] 在该知识库中已存在",
         )
 
-    object_name, size = save_file(file, current_user.id, knowledge_base_id)
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="文件名无效")
+
+    try:
+        object_name, size = save_file(file, current_user.id, knowledge_base_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     doc = Document(
         user_id=current_user.id,

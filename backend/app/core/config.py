@@ -40,6 +40,9 @@ class Settings(BaseSettings):
 
     CHAT_MAX_MESSAGES: int = 50
 
+    UPLOAD_ALLOWED_EXTENSIONS: str = "pdf,txt,md,xlsx,xls"
+    UPLOAD_MAX_SIZE_MB: int = 20
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -59,6 +62,18 @@ class Settings(BaseSettings):
             if not self.OLLAMA_MODEL.strip():
                 raise ValueError("OLLAMA_MODEL is required when LLM_PROVIDER=ollama")
         return self
+
+    @property
+    def allowed_upload_extensions(self) -> set[str]:
+        return {
+            ext.strip().lower().lstrip(".")
+            for ext in self.UPLOAD_ALLOWED_EXTENSIONS.split(",")
+            if ext.strip()
+        }
+
+    @property
+    def UPLOAD_MAX_SIZE_BYTES(self) -> int:
+        return int(self.UPLOAD_MAX_SIZE_MB) * 1024 * 1024
 
     @property
     def DATABASE_URL(self) -> str:

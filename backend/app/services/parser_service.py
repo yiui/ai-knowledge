@@ -30,10 +30,35 @@ def parse_md(file_path: str) -> list[str]:
         return [f.read()]
 
 
+def parse_excel(file_path: str) -> list[str]:
+    import pandas as pd
+
+    suffix = Path(file_path).suffix.lower()
+    engine = "xlrd" if suffix == ".xls" else "openpyxl"
+
+    try:
+        sheets = pd.read_excel(file_path, sheet_name=None, engine=engine)
+    except Exception as exc:
+        raise ValueError(f"无法解析 Excel 文件: {exc}") from exc
+
+    parts: list[str] = []
+    for sheet_name, df in sheets.items():
+        if df is None or df.empty:
+            continue
+        df = df.fillna("")
+        lines: list[str] = []
+        for _, row in df.iterrows():
+            cells = [str(v).strip() for v in row if str(v).strip()]
+            if cells:
+                lines.append(" | ".join(cells))
+        if lines:
+            title = str(sheet_name) if sheet_name else "Sheet"
+            parts.append(f"【{title}】\n" + "\n".join(lines))
+
+    return parts if parts else [""]
 
 
 def parse_document(file_path: str):
-
     suffix = Path(file_path).suffix.lower()
 
     if suffix == ".pdf":
@@ -45,7 +70,10 @@ def parse_document(file_path: str):
     if suffix == ".md":
         return parse_md(file_path)
 
-    raise ValueError("unsupported file type")
+    if suffix in (".xlsx", ".xls"):
+        return parse_excel(file_path)
+
+    raise ValueError(f"unsupported file type: {suffix}")
 
 
 
