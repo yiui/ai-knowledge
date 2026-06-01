@@ -1,28 +1,25 @@
+from datetime import datetime
+
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
+
+from app.api.deps import get_current_user, get_db
 from app.core.minio_client import client as minio_client
 from app.core.config import settings
-from app.db.session import SessionLocal
 from app.models.document import Document
+from app.models.user import User
 from app.services.document_service import save_file
 from app.services.ingest_service import process_document
 from app.services.vector_service import delete_document_vectors
 router = APIRouter()
 
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
 @router.post("/documents/upload")
 def upload_document(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    background_tasks: BackgroundTasks = BackgroundTasks()
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    _: User = Depends(get_current_user),
 ):
     # 检查同名文件
     exists = (
@@ -64,7 +61,10 @@ def upload_document(
 
 # 获取所有文档
 @router.get("/documents")
-def get_documents(db: Session = Depends(get_db)):
+def get_documents(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
     docs = db.query(Document).order_by(Document.created_at.desc()).all()
     return [
         {
@@ -80,7 +80,11 @@ def get_documents(db: Session = Depends(get_db)):
 
 # 删除文档
 @router.delete("/documents/{doc_id}")
-def delete_document(doc_id: int, db: Session = Depends(get_db)):
+def delete_document(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
     doc = db.query(Document).filter(Document.id == doc_id).first()
 
     if not doc:
@@ -94,9 +98,6 @@ def delete_document(doc_id: int, db: Session = Depends(get_db)):
     delete_document_vectors(doc_id)
 
     return {"message": "deleted", "id": doc_id}
-
-# 格式化大小和时间
-from datetime import datetime
 
 def format_size(size: int) -> str:
     return f"{round(size / (1024 * 1024), 2)} MB"

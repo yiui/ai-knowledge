@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     MINIO_BUCKET: str
     MINIO_SECURE: bool
 
+    JWT_SECRET: str = "change-me-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 60 * 24 * 7
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

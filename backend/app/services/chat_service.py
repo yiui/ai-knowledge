@@ -8,8 +8,10 @@ class ChatService:
 
     def _build_prompt(self, question: str, *, stream: bool = False) -> tuple[str, list]:
         docs = search_similar(question, k=4)
+        for doc in docs:
+            print("doc:",doc.metadata, doc.page_content)
         context = "\n\n".join([d.page_content for d in docs])
-
+        # print("context:", context)
         if stream:
             prompt = f"""
 你是企业知识库助手。

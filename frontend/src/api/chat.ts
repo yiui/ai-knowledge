@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/config'
+import { getToken } from '@/stores/auth'
 
 import { http } from './http'
 
@@ -14,9 +15,15 @@ export const chatStreamApi = async (
   question: string,
   onChunk: (text: string) => void,
 ): Promise<void> => {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = getToken()
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+
   const response = await fetch(`${API_BASE_URL}/chat/stream`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ question }),
   })
 
