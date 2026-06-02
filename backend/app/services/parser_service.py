@@ -42,15 +42,26 @@ def parse_excel(file_path: str) -> list[str]:
         raise ValueError(f"无法解析 Excel 文件: {exc}") from exc
 
     parts: list[str] = []
+    headers: list[str] = []
     for sheet_name, df in sheets.items():
         if df is None or df.empty:
             continue
         df = df.fillna("")
         lines: list[str] = []
+        prerow:list[str] = []
         for _, row in df.iterrows():
+            # 如果当前行和上一行长度相同且headers为空，则认为上一行是标题行
+            if len(row.tolist()) == len(prerow) and len(headers) == 0:
+                headers=prerow
+
             cells = [str(v).strip() for v in row if str(v).strip()]
             if cells:
-                lines.append(" | ".join(cells))
+                result = "|".join(
+                    f"{k}:{v}"
+                    for k, v in zip(headers, cells)
+                )
+                lines.append(result)
+                prerow = cells
         if lines:
             title = str(sheet_name) if sheet_name else "Sheet"
             parts.append(f"【{title}】\n" + "\n".join(lines))
