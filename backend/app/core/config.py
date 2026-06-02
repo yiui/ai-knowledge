@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-LLMProvider = Literal["gemini", "ollama"]
+LLMProvider = Literal["gemini", "ollama", "deepseek"]
 
 
 class Settings(BaseSettings):
@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str
     OLLAMA_BASE_URL: str
     OLLAMA_MODEL: str
+
+    DEEPSEEK_API_KEY: str = ""
+    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
+    DEEPSEEK_MODEL: str = "deepseek-chat"
 
     POSTGRES_HOST: str
     POSTGRES_PORT: int
@@ -61,6 +65,11 @@ class Settings(BaseSettings):
                 raise ValueError("OLLAMA_BASE_URL is required when LLM_PROVIDER=ollama")
             if not self.OLLAMA_MODEL.strip():
                 raise ValueError("OLLAMA_MODEL is required when LLM_PROVIDER=ollama")
+        elif self.LLM_PROVIDER == "deepseek":
+            if not self.DEEPSEEK_API_KEY.strip():
+                raise ValueError("DEEPSEEK_API_KEY is required when LLM_PROVIDER=deepseek")
+            if not self.DEEPSEEK_MODEL.strip():
+                raise ValueError("DEEPSEEK_MODEL is required when LLM_PROVIDER=deepseek")
         return self
 
     @property

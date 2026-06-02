@@ -55,6 +55,9 @@ async def config():
     }
     if settings.LLM_PROVIDER == "gemini":
         llm_config["model"] = settings.GEMINI_MODEL
+    elif settings.LLM_PROVIDER == "deepseek":
+        llm_config["model"] = settings.DEEPSEEK_MODEL
+        llm_config["base_url"] = settings.DEEPSEEK_BASE_URL
     else:
         llm_config["model"] = settings.OLLAMA_MODEL
         llm_config["base_url"] = settings.OLLAMA_BASE_URL

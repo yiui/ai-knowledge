@@ -13,6 +13,9 @@ def ask_llm(prompt: str, provider: LLMProvider | None = None) -> str:
             from app.core.gemini import ask_gemini
             print("ask_gemini", prompt)
             return ask_gemini(prompt)
+        case "deepseek":
+            from app.core.deepseek import ask_deepseek
+            return ask_deepseek(prompt)
         case other:
             raise ValueError(f"Unsupported LLM provider: {other}")
 
@@ -27,5 +30,9 @@ def stream_llm(prompt: str, provider: LLMProvider | None = None) -> Iterator[str
             from app.core.gemini import stream_gemini
 
             yield from stream_gemini(prompt)
+        case "deepseek":
+            from app.core.deepseek import stream_deepseek
+
+            yield from stream_deepseek(prompt)
         case other:
             raise ValueError(f"Unsupported LLM provider: {other}")
