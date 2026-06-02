@@ -48,7 +48,8 @@ fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
 python -m pip install -q -U pip
-python -m pip install -q -e .
+# 生产环境使用普通安装，避免 editable 安装对 PEP 660 的要求。
+python -m pip install -q .
 deactivate
 cd "${REPO_ROOT}"
 
