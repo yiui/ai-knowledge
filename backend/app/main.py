@@ -73,12 +73,23 @@ async def config():
     else:
         embedding_config["base_url"] = settings.embedding_base_url
 
+    rerank_config = {
+        "enabled": settings.RERANK_ENABLED,
+        "provider": settings.RERANK_PROVIDER,
+        "model": settings.RERANK_MODEL,
+    }
+    if settings.RERANK_PROVIDER in {"openai_compat", "dashscope"}:
+        rerank_config["base_url"] = settings.rerank_api_url
+    elif settings.RERANK_PROVIDER == "ollama":
+        rerank_config["base_url"] = settings.rerank_base_url_ollama
+
     return {
         "app_name": settings.APP_NAME,
         "version": settings.APP_VERSION,
         "debug": settings.DEBUG,
         "llm": llm_config,
         "embedding": embedding_config,
+        "rerank": rerank_config,
         "chat": {
             "max_messages_per_conversation": settings.CHAT_MAX_MESSAGES,
         },
