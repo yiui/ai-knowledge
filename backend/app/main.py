@@ -62,11 +62,23 @@ async def config():
         llm_config["model"] = settings.OLLAMA_MODEL
         llm_config["base_url"] = settings.OLLAMA_BASE_URL
 
+    embedding_config = {
+        "provider": settings.EMBEDDING_PROVIDER,
+        "model": settings.EMBEDDING_MODEL,
+    }
+    if settings.EMBEDDING_PROVIDER == "openai_compat":
+        embedding_config["base_url"] = settings.EMBEDDING_BASE_URL
+        if settings.EMBEDDING_DIMENSIONS > 0:
+            embedding_config["dimensions"] = settings.EMBEDDING_DIMENSIONS
+    else:
+        embedding_config["base_url"] = settings.embedding_base_url
+
     return {
         "app_name": settings.APP_NAME,
         "version": settings.APP_VERSION,
         "debug": settings.DEBUG,
         "llm": llm_config,
+        "embedding": embedding_config,
         "chat": {
             "max_messages_per_conversation": settings.CHAT_MAX_MESSAGES,
         },
