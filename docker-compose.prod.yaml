@@ -1,10 +1,14 @@
-# 生产环境基础设施：与 backend/.env 中的 POSTGRES_*、MINIO_* 保持一致
+# 生产环境：前后端 + Postgres + MinIO，一键构建运行
+# 部署: docker compose --env-file backend/.env -f docker-compose.prod.yaml up -d --build
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: ai-postgres
+    env_file:
+      - ./backend/.env
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-ai_kb}
+      POSTGRES_DB: ${POSTGRES_DB:-ai_knowledge}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
@@ -13,17 +17,19 @@ services:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ai_kb}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ai_knowledge}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - ai-net
 
   minio:
     image: minio/minio
     container_name: ai-minio
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-admin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-admin123456}
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-admin123456}
     command: server /data --console-address ":9001"
     ports:
       - "9000:9000"
@@ -31,6 +37,49 @@ services:
     volumes:
       - minio_data:/data
     restart: unless-stopped
+    networks:
+      - ai-net
+
+  backend:
+    build:
+      context: ./backend
+    container_name: ai-backend
+    env_file:
+      - ./backend/.env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      MINIO_ENDPOINT: minio:9000
+      MINIO_SECURE: "false"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - ai-net
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # 同域部署必须留空；勿设为 localhost:8000（会请求访问者本机）
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+    container_name: ai-frontend
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - ai-net
+
+networks:
+  ai-net:
+    driver: bridge
 
 volumes:
   postgres_data:

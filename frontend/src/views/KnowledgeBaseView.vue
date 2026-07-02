@@ -78,11 +78,12 @@ const createError = ref('')
 
 const loadKbs = async () => {
   kbs.value = await listKnowledgeBases()
-  if (kbs.value.length > 0 && !selectedId.value) {
-    selectedId.value = kbs.value[0].id
+  const firstKb = kbs.value[0]
+  if (firstKb && !selectedId.value) {
+    selectedId.value = firstKb.id
   }
   if (selectedId.value && !kbs.value.some((kb) => kb.id === selectedId.value)) {
-    selectedId.value = kbs.value[0]?.id ?? null
+    selectedId.value = firstKb?.id ?? null
   }
 }
 

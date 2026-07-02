@@ -30,7 +30,7 @@ jobs:
           script: |
             set -euo pipefail
             if [ -z "${DEPLOY_PATH:-}" ]; then
-              echo "ERROR: GitHub secret DEPLOY_PATH is not set (e.g. /opt/ai-knowledge)" >&2
+              echo "ERROR: set GitHub secret DEPLOY_PATH (e.g. /opt/ai-knowledge)" >&2
               exit 1
             fi
             cd "${DEPLOY_PATH}"
