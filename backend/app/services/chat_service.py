@@ -1,7 +1,8 @@
 from collections.abc import Iterator
 
+from app.core.config import settings
 from app.core.llm import ask_llm, stream_llm
-from app.services.vector_service import search_similar
+from app.services.vector_service import search_hybrid, search_similar
 
 
 class ChatService:
@@ -29,12 +30,23 @@ class ChatService:
         *,
         stream: bool = False,
     ) -> tuple[str, list]:
-        docs = search_similar(
-            question,
-            user_id=user_id,
-            knowledge_base_id=knowledge_base_id,
-            k=2,
-        )
+        # 使用混合检索（当启用时）或纯向量检索
+        if settings.HYBRID_SEARCH_ENABLED:
+            print("混合检索！")
+            docs = search_hybrid(
+                question,
+                user_id=user_id,
+                knowledge_base_id=knowledge_base_id,
+                k=2,
+            )
+        else:
+            print("向量检索！")
+            docs = search_similar(
+                question,
+                user_id=user_id,
+                knowledge_base_id=knowledge_base_id,
+                k=2,
+            )
         print("提问:", question)
         for doc in docs:
             print("召回结果:", doc.page_content)
@@ -66,7 +78,7 @@ class ChatService:
 问题：
 {question}
 
-如果上下文没有答案，请回答“未找到相关信息”。
+如果上下文没有答案，请回答"未找到相关信息"。
 """
         return prompt, docs
 

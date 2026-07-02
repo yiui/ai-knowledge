@@ -1,7 +1,7 @@
 /backend/.env
 /backend/.venv
 /frontend/.env
-/.idea
+.idea
 .vscode
 /docs
 __pycache__

@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     VECTOR_RECALL_K: int = 20
     RERANK_TOP_K: int = 4
 
+    # 混合检索：向量 + BM25 关键词
+    HYBRID_SEARCH_ENABLED: bool = True
+    KEYWORD_RECALL_K: int = 20
+
     CHAT_MAX_MESSAGES: int = 50
 
     UPLOAD_ALLOWED_EXTENSIONS: str = "pdf,txt,md,xlsx,xls"
