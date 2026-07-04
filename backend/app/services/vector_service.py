@@ -7,9 +7,8 @@ from app.services.rerank_service import rerank_documents
 
 
 def _get_vector_store():
-    """延迟导入 vector_store —— 避免模块加载时连 Postgres（测试场景需要 mock）。"""
-    from app.services.vector_store import vector_store
-    return vector_store
+    from app.services.vector_store import get_vector_store
+    return get_vector_store()
 
 
 def search_similar(
@@ -122,6 +121,8 @@ def search_hybrid(
 
 
 def delete_document_vectors(document_id: int, knowledge_base_id: int):
+    # 确保 PGVector 表已创建（首次调用时建表）
+    _get_vector_store()
     with engine.begin() as conn:
         conn.execute(
             text("""
@@ -142,8 +143,14 @@ def upsert_document_vectors(chunks: list, document_id: int, knowledge_base_id: i
     """幂等写入文档向量：先删 document_id 对应的旧向量，再插入新向量。
 
     返回实际写入的 chunk 数。
-    必须在 transaction 内：要么全成功、要么全失败，避免半成品。
     """
+    if not chunks:
+        return 0
+
+    # 先触发 PGVector 初始化（首次调用会建 langchain_pg_embedding 表），
+    # 否则下面的 DELETE 会因为表不存在而报错。
+    vs = _get_vector_store()
+
     with engine.begin() as conn:
         conn.execute(
             text("""
@@ -153,9 +160,6 @@ def upsert_document_vectors(chunks: list, document_id: int, knowledge_base_id: i
             {"doc_id": str(document_id)},
         )
 
-    if not chunks:
-        return 0
-
     # PGVector.add_documents 内部会开自己的 session 做 INSERT
-    _get_vector_store().add_documents(documents=chunks)
+    vs.add_documents(documents=chunks)
     return len(chunks)

@@ -26,7 +26,7 @@ def get_vector_store():
 
 
 # 向后兼容：让 `from app.services.vector_store import vector_store` 仍能工作
-def __getattr__(name):
-    if name == "vector_store":
-        return get_vector_store()
-    raise AttributeError(name)
+# def __getattr__(name):
+#     if name == "vector_store":
+#         return get_vector_store()
+#     raise AttributeError(name)
