@@ -7,12 +7,27 @@ def parse_pdf(file_path: str) -> list[str]:
     """
     返回每页文本
     """
+    import logging
+    log = logging.getLogger("parser")
+
+    try:
         # 1. 先抽文本
-    pages = extract_pdf_text(file_path)
+        pages = extract_pdf_text(file_path)
+    except MemoryError:
+        log.exception("PDF text extraction OOM, fallback to OCR")
+        pages = []
+    except Exception:
+        log.exception("PDF text extraction failed")
+        pages = []
 
     # 2. 如果文本质量差 → OCR
     if not is_text_valid(pages):
-        pages = run_ocr(file_path)
+        try:
+            pages = run_ocr(file_path)
+        except MemoryError:
+            log.exception("PDF OCR OOM, returning whatever we have")
+        except Exception:
+            log.exception("PDF OCR failed")
 
     # 3. 最终兜底过滤
     pages = [p.strip() for p in pages if p and p.strip()]
@@ -114,31 +129,82 @@ def is_text_valid(pages: list[str]) -> bool:
     return total_chars > 50
 
 
+def _get_pdf_page_count(file_path: str) -> int:
+    """获取 PDF 总页数，不加载全部内容。"""
+    import fitz  # PyMuPDF
+    doc = fitz.open(file_path)
+    count = doc.page_count
+    doc.close()
+    return count
+
+
 def run_ocr(file_path: str) -> list[str]:
     """
-    这里接 RapidOCR / PaddleOCR
+    OCR 识别。逐页处理以免 2C4G 小机器内存溢出。
     """
+    import gc
+    import logging
+
     from PIL import Image
-
     from rapidocr_onnxruntime import RapidOCR
-
-    ocr = RapidOCR()
-
-    # 解除 Pillow 像素数限制（大尺寸 PDF 转图会超标）
-    Image.MAX_IMAGE_PIXELS = None
-
     from pdf2image import convert_from_path
 
-    # dpi=150 兼顾 OCR 精度和内存占用
-    images = convert_from_path(file_path, dpi=150)
+    log = logging.getLogger("ocr")
 
-    pages = []
+    # 限制单张图片最大像素（宽×高），防止超大页面撑爆内存
+    # 4000×4000 = 16MP，对 OCR 足够了
+    Image.MAX_IMAGE_PIXELS = 16_000_000
 
-    for img in images:
-        result, _ = ocr(img)
-        text = "\n".join([r[1] for r in result]) if result else ""
-        # print("ocr text:", text)
-        if text.strip():
-            pages.append(text)
+    total_pages = _get_pdf_page_count(file_path)
+
+    # 内存保护：超过 50 页的 PDF 只 OCR 前 50 页
+    MAX_OCR_PAGES = 50
+    process_count = min(total_pages, MAX_OCR_PAGES)
+    if total_pages > MAX_OCR_PAGES:
+        log.warning(
+            "PDF has %d pages, only OCR first %d to conserve memory",
+            total_pages, MAX_OCR_PAGES,
+        )
+
+    ocr = RapidOCR()
+    pages: list[str] = []
+
+    try:
+        for page_num in range(1, process_count + 1):
+            try:
+                # 逐页转换，fmt='jpeg' 比默认 ppm 省内存
+                images = convert_from_path(
+                    file_path,
+                    dpi=120,
+                    first_page=page_num,
+                    last_page=page_num,
+                    fmt='jpeg',
+                    grayscale=True,
+                )
+                if not images:
+                    continue
+
+                img = images[0]
+                result, _ = ocr(img)
+
+                # 立即释放图片内存
+                img.close()
+                del images
+                del img
+
+                text = "\n".join([r[1] for r in result]) if result else ""
+                if text.strip():
+                    pages.append(text)
+
+            except MemoryError:
+                log.exception(
+                    "OOM at page %d/%d, skip remaining pages", page_num, process_count,
+                )
+                break
+            except Exception:
+                log.exception("OCR page %d/%d failed", page_num, process_count)
+    finally:
+        del ocr
+        gc.collect()
 
     return pages
