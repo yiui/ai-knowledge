@@ -4,7 +4,12 @@ from app.core.config import settings
 from app.db.session import engine
 from app.services.keyword_service import invalidate_index, keyword_search
 from app.services.rerank_service import rerank_documents
-from app.services.vector_store import vector_store
+
+
+def _get_vector_store():
+    """延迟导入 vector_store —— 避免模块加载时连 Postgres（测试场景需要 mock）。"""
+    from app.services.vector_store import vector_store
+    return vector_store
 
 
 def search_similar(
@@ -16,7 +21,7 @@ def search_similar(
     top_k = k or settings.RERANK_TOP_K
     recall_k = max(top_k, settings.VECTOR_RECALL_K)
 
-    docs = vector_store.similarity_search(
+    docs = _get_vector_store().similarity_search(
         query,
         k=recall_k,
         filter={
@@ -86,7 +91,7 @@ def search_hybrid(
     keyword_k = max(top_k, settings.KEYWORD_RECALL_K)
 
     # 1. 向量检索
-    dense_docs = vector_store.similarity_search(
+    dense_docs = _get_vector_store().similarity_search(
         query,
         k=recall_k,
         filter={
@@ -94,10 +99,7 @@ def search_hybrid(
             "knowledge_base_id": str(knowledge_base_id),
         },
     )
-    print("向量召数量",len(dense_docs))
-    for doc in dense_docs:
-        print("向量召回结果:", doc)
-        print("-" * 100)
+
     # 2. BM25 关键词检索
     sparse_results = keyword_search(
         query,
@@ -105,11 +107,6 @@ def search_hybrid(
         user_id=user_id,
         k=keyword_k,
     )
-    print("关键字召数量",len(sparse_results))
-    for doc in sparse_results:
-        print("关键字召回结果:", doc)
-        print("-" * 100)
-
 
     # 3. RRF 融合
     fused = _rrf_fusion(dense_docs, sparse_results)
@@ -139,3 +136,26 @@ def delete_document_vectors(document_id: int, knowledge_base_id: int):
         )
     # 文档删除后使 BM25 索引失效
     invalidate_index(knowledge_base_id)
+
+
+def upsert_document_vectors(chunks: list, document_id: int, knowledge_base_id: int) -> int:
+    """幂等写入文档向量：先删 document_id 对应的旧向量，再插入新向量。
+
+    返回实际写入的 chunk 数。
+    必须在 transaction 内：要么全成功、要么全失败，避免半成品。
+    """
+    with engine.begin() as conn:
+        conn.execute(
+            text("""
+                DELETE FROM langchain_pg_embedding
+                WHERE cmetadata->>'document_id' = :doc_id
+            """),
+            {"doc_id": str(document_id)},
+        )
+
+    if not chunks:
+        return 0
+
+    # PGVector.add_documents 内部会开自己的 session 做 INSERT
+    _get_vector_store().add_documents(documents=chunks)
+    return len(chunks)

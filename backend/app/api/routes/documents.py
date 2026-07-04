@@ -1,12 +1,12 @@
 from datetime import datetime
 
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks, Query
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
 from app.core.minio_client import client as minio_client
 from app.core.config import settings
-from app.models.document import Document
+from app.models.document import Document, DocumentStatus
 from app.models.user import User
 from app.services.document_service import save_file
 from app.services.ingest_service import process_document
@@ -18,12 +18,19 @@ router = APIRouter()
 
 @router.post("/documents/upload")
 def upload_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     knowledge_base_id: int = Query(..., description="目标知识库 ID"),
     db: Session = Depends(get_db),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
     current_user: User = Depends(get_current_user),
 ):
+    """上传文档。
+
+    行为：
+    - 同步部分：MinIO 上传 + Document 行插入（status=pending）。
+    - 异步部分：BackgroundTasks 调用 process_document，处理完成后状态变为 ready/failed。
+    - 返回新增 status / vector_count 字段，前端可轮询。
+    """
     kb = get_user_knowledge_base(db, knowledge_base_id, current_user.id)
     if not kb:
         raise HTTPException(status_code=404, detail="知识库不存在")
@@ -57,24 +64,33 @@ def upload_document(
         filename=file.filename,
         path=object_name,
         size=size,
+        status=DocumentStatus.PENDING.value,
     )
 
     db.add(doc)
     db.commit()
     db.refresh(doc)
 
+    # 用 BackgroundTasks 异步处理，进程重启时会丢失当前正在处理的任务，
+    # 但 pending 状态的行还在 DB 里，定时任务会捡回来。
     background_tasks.add_task(
         process_document,
         doc.id,
-        object_name,
+        doc.path,
         current_user.id,
         knowledge_base_id,
     )
+
     return {
         "id": doc.id,
         "filename": doc.filename,
         "path": doc.path,
         "knowledge_base_id": knowledge_base_id,
+        "size": format_size(doc.size),
+        "status": doc.status,
+        "vector_count": doc.vector_count,
+        "error_message": doc.error_message,
+        "created_at": format_time(doc.created_at),
     }
 
 
@@ -101,9 +117,61 @@ def get_documents(
             "size": format_size(doc.size),
             "created_at": format_time(doc.created_at),
             "knowledge_base_id": doc.knowledge_base_id,
+            "status": doc.status,
+            "error_message": doc.error_message,
+            "vector_count": doc.vector_count,
         }
         for doc in docs
     ]
+
+
+@router.post("/documents/{doc_id}/reindex")
+def reindex_document(
+    doc_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """把文档从 failed / processing 重新置为 pending，通过 BackgroundTasks 重新处理。
+
+    适用于：Embedding 临时故障修复后、用户主动重试。
+    """
+    doc = (
+        db.query(Document)
+        .filter(
+            Document.id == doc_id,
+            Document.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+
+    if doc.status not in (DocumentStatus.FAILED.value, DocumentStatus.PROCESSING.value):
+        raise HTTPException(
+            status_code=400,
+            detail=f"当前状态 [{doc.status}] 不支持重试，仅 failed/processing 可重试",
+        )
+
+    doc.status = DocumentStatus.PENDING.value
+    doc.error_message = None
+    doc.vector_count = 0
+    db.commit()
+
+    background_tasks.add_task(
+        process_document,
+        doc.id,
+        doc.path,
+        current_user.id,
+        doc.knowledge_base_id,
+    )
+
+    return {
+        "id": doc.id,
+        "status": doc.status,
+        "message": "已提交重试，正在重新向量化",
+    }
 
 
 @router.delete("/documents/{doc_id}")

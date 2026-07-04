@@ -24,6 +24,11 @@ export const getDocuments = async (knowledgeBaseId: number) => {
   return res.data
 }
 
+export const reindexDocument = async (id: number) => {
+  const res = await http.post(`/documents/${id}/reindex`)
+  return res.data
+}
+
 export const deleteDocument = async (id: number) => {
   const res = await http.delete(`/documents/${id}`)
   return res.data

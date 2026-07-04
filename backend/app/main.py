@@ -4,12 +4,22 @@ from app.api.routes.llm import router as llm_router
 from app.api.routes.documents import router as doc_router
 from app.core.config import settings
 from app.core.upload import upload_limits_payload
-from fastapi.middleware.cors import CORSMiddleware 
+from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes.chat import router as chat_router
 from app.api.routes.search import router as search_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.knowledge_bases import router as kb_router
 from app.api.routes.conversations import router as conversations_router
+from sqlalchemy import text
+from app.db.session import SessionLocal, engine
+from app.models.document import Document
+from datetime import datetime, timedelta,timezone
+import threading
+import time
+import logging
+
+log = logging.getLogger("startup")
+
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
@@ -30,9 +40,100 @@ app.include_router(doc_router)
 app.include_router(chat_router)
 app.include_router(conversations_router)
 app.include_router(search_router)
+
+# 定时恢复卡住的任务
+_stale_recovery_stop = False
+_stale_recovery_thread: threading.Thread | None = None
+
+
+def _stale_recovery_loop():
+    """后台线程：每 5 分钟回收卡住的任务。
+
+    分两步，避免与仍在运行的 BackgroundTask 并发处理同一文档：
+    1. 僵死 processing（updated_at > 10 min 未更新）→ 只重置为 pending，不处理
+    2. 冷却期已过的 pending（updated_at > 5 min，即非刚重置、非活跃 BackgroundTask）
+       → 批量同步处理
+
+    刚重置的文档 updated_at 被刷新，不会在本轮被 step 2 捞到，
+    下一轮（5 min 后）冷却期已过才会被处理。
+    """
+    from app.services.ingest_service import process_document_with_status
+
+    global _stale_recovery_stop
+    log.info("stale recovery loop started")
+    while not _stale_recovery_stop:
+        try:
+            # 1. 回收僵死 processing → pending（只重置，不处理）
+            with engine.begin() as conn:
+                result = conn.execute(
+                    text("""
+                        UPDATE documents
+                        SET status = 'pending', error_message = NULL, updated_at = NOW()
+                        WHERE status = 'processing'
+                          AND updated_at < NOW() - INTERVAL '10 minutes'
+                    """)
+                )
+                if result.rowcount > 0:
+                    log.info(
+                        "stale recovery: reset %s stale processing → pending",
+                        result.rowcount,
+                    )
+
+            # 2. 批量处理冷却期已过的 pending 文档
+            cooldown = datetime.now(timezone.utc) - timedelta(minutes=5)
+            with SessionLocal() as db:
+                orphans = (
+                    db.query(Document)
+                    .filter(
+                        Document.status == "pending",
+                        Document.updated_at < cooldown,
+                    )
+                    .order_by(Document.created_at)
+                    .all()
+                )
+
+            for doc in orphans:
+                log.info("stale recovery: processing pending doc_id=%s", doc.id)
+                try:
+                    process_document_with_status(
+                        document_id=doc.id,
+                        file_path=doc.path,
+                        user_id=doc.user_id,
+                        knowledge_base_id=doc.knowledge_base_id,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    log.exception(
+                        "stale recovery: pending process failed doc_id=%s: %s",
+                        doc.id, exc,
+                    )
+
+        except Exception as exc:  # noqa: BLE001
+            log.exception("stale recovery loop error: %s", exc)
+
+        # 等待 5 分钟（用小块 sleep 以便快速退出）
+        for _ in range(300):
+            if _stale_recovery_stop:
+                break
+            time.sleep(1)
+
+
 @app.on_event("startup")
 def on_startup():
     init_db()
+    global _stale_recovery_thread
+    _stale_recovery_thread = threading.Thread(
+        target=_stale_recovery_loop,
+        daemon=True,
+        name="stale-recovery",
+    )
+    _stale_recovery_thread.start()
+
+
+@app.on_event("shutdown")
+def on_shutdown():
+    global _stale_recovery_stop
+    _stale_recovery_stop = True
+    log.info("stale recovery loop stopped")
 
 
 @app.get("/")
