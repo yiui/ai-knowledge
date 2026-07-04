@@ -97,7 +97,7 @@ def extract_pdf_text(file_path: str) -> list[str]:
     for doc in docs:
         text = doc.page_content or ""
         text = text.strip()
-        print("text:", text)    
+        # print("text:", text)    
         if text:
             pages.append(text)
 
@@ -118,21 +118,26 @@ def run_ocr(file_path: str) -> list[str]:
     """
     这里接 RapidOCR / PaddleOCR
     """
+    from PIL import Image
+
     from rapidocr_onnxruntime import RapidOCR
 
     ocr = RapidOCR()
 
-    # 示例：逐页OCR（你可以优化成 image render）
+    # 解除 Pillow 像素数限制（大尺寸 PDF 转图会超标）
+    Image.MAX_IMAGE_PIXELS = None
+
     from pdf2image import convert_from_path
 
-    images = convert_from_path(file_path)
+    # dpi=150 兼顾 OCR 精度和内存占用
+    images = convert_from_path(file_path, dpi=150)
 
     pages = []
 
     for img in images:
         result, _ = ocr(img)
         text = "\n".join([r[1] for r in result]) if result else ""
-        print("ocr text:", text)
+        # print("ocr text:", text)
         if text.strip():
             pages.append(text)
 

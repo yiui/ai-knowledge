@@ -139,6 +139,13 @@ def delete_document_vectors(document_id: int, knowledge_base_id: int):
     invalidate_index(knowledge_base_id)
 
 
+def _sanitize_text(text: str) -> str:
+    """移除 PostgreSQL 不能存储的字符（NUL 等）。"""
+    if not text:
+        return text
+    return text.replace("\x00", "")
+
+
 def upsert_document_vectors(chunks: list, document_id: int, knowledge_base_id: int) -> int:
     """幂等写入文档向量：先删 document_id 对应的旧向量，再插入新向量。
 
@@ -146,6 +153,14 @@ def upsert_document_vectors(chunks: list, document_id: int, knowledge_base_id: i
     """
     if not chunks:
         return 0
+
+    # 最终防线：确保 chunk 文本和 metadata 不含 NUL 字符
+    for chunk in chunks:
+        chunk.page_content = _sanitize_text(chunk.page_content)
+        if chunk.metadata:
+            for k, v in chunk.metadata.items():
+                if isinstance(v, str):
+                    chunk.metadata[k] = _sanitize_text(v)
 
     # 先触发 PGVector 初始化（首次调用会建 langchain_pg_embedding 表），
     # 否则下面的 DELETE 会因为表不存在而报错。

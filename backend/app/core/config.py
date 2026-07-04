@@ -77,6 +77,10 @@ class Settings(BaseSettings):
     UPLOAD_ALLOWED_EXTENSIONS: str = "pdf,txt,md,xlsx,xls"
     UPLOAD_MAX_SIZE_MB: int = 20
 
+    DB_POOL_SIZE: int = 20
+    DB_MAX_OVERFLOW: int = 30
+    DB_POOL_RECYCLE: int = 3600
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

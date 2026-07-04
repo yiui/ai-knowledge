@@ -21,22 +21,20 @@ if [[ ! -f backend/.env ]]; then
   exit 1
 fi
 
-log "Pull origin/${DEPLOY_BRANCH}"
-git fetch origin "${DEPLOY_BRANCH}"
-git reset --hard "origin/${DEPLOY_BRANCH}"
+log "Fetching origin/${DEPLOY_BRANCH} (force sync latest commit)"
+git fetch origin "${DEPLOY_BRANCH}" --prune --force
+git reset --hard FETCH_HEAD
+git clean -fd
+
+log "DEPLOY COMMIT: $(git rev-parse HEAD)"
 
 log "Docker compose up --build"
 docker compose --env-file backend/.env -f "${COMPOSE_FILE}" up -d --build --remove-orphans
 
+log "Container status:"
+docker compose -f "${COMPOSE_FILE}" ps
+
 log "Prune dangling images (optional)"
 docker image prune -f >/dev/null 2>&1 || true
 
-# 取消健康监测
-# HTTP_PORT="${HTTP_PORT:-8000}"
-# if curl -sf "http://127.0.0.1:${HTTP_PORT}/health" >/dev/null 2>&1; then
-#   log "Health check OK (http://127.0.0.1:${HTTP_PORT}/health)"
-# else
-#   log "WARN: health check failed; inspect: docker compose -f ${COMPOSE_FILE} logs -f backend frontend"
-# fi
-
-log "Deploy finished"
+log "Deploy finished successfully"

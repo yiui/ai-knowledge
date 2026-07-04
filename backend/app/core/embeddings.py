@@ -22,9 +22,10 @@ def create_embeddings() -> Embeddings:
         case "ollama":
             from langchain_ollama import OllamaEmbeddings
 
-            return OllamaEmbeddings(
+            base = OllamaEmbeddings(
                 model=settings.EMBEDDING_MODEL,
                 base_url=settings.embedding_base_url,
             )
+            return BatchEmbeddings(base, settings.EMBEDDING_BATCH_SIZE)
         case other:
             raise ValueError(f"Unsupported embedding provider: {other}")
