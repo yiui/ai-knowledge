@@ -143,7 +143,7 @@ import { validateUploadFile } from '../utils/uploadValidate'
 const props = defineProps({
   knowledgeBaseId: {
     type: Number,
-    required: true,
+    default: undefined,
   },
 })
 
@@ -231,6 +231,7 @@ const loadUploadLimits = async () => {
 // ---- 文档列表加载 ----
 
 const loadDocs = async () => {
+  if (props.knowledgeBaseId == null) return
   docs.value = await getDocuments(props.knowledgeBaseId)
 }
 
@@ -335,7 +336,9 @@ const onDrop = async (e: DragEvent) => {
 
   const files: File[] = []
   for (let i = 0; i < items.length; i++) {
-    const entry = items[i].webkitGetAsEntry()
+    const item = items[i]
+    if (!item) continue
+    const entry = item.webkitGetAsEntry()
     if (entry) {
       await traverseFileTree(entry, files)
     }
@@ -409,6 +412,11 @@ const processQueue = async () => {
 
     task.status = 'uploading'
     try {
+      if (props.knowledgeBaseId == null) {
+        task.status = 'failed'
+        task.error = '未选择知识库'
+        continue
+      }
       await uploadDocument(task.file, props.knowledgeBaseId)
       task.status = 'success'
     } catch (e: any) {
