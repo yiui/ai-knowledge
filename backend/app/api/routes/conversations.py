@@ -207,6 +207,12 @@ def chat_stream_in_conversation(
             for chunk in chat_service.chat_stream(question, user_id, kb_id):
                 chunks.append(chunk)
                 yield f"data: {json.dumps({'text': chunk})}\n\n"
+        except Exception as exc:  # noqa: BLE001
+            import logging
+            logging.getLogger("chat").exception("stream failed")
+            err_msg = f"请求失败: {exc}"
+            yield f"data: {json.dumps({'text': err_msg})}\n\n"
+            chunks.append(err_msg)
         finally:
             answer = "".join(chunks)
             save_db = SessionLocal()

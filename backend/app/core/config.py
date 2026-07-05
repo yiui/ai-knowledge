@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-LLMProvider = Literal["gemini", "ollama", "deepseek"]
+LLMProvider = Literal["gemini", "ollama", "deepseek", "bailian"]
 EmbeddingProvider = Literal["openai_compat", "ollama"]
 RerankProvider = Literal["openai_compat", "dashscope", "ollama"]
 
@@ -14,24 +14,24 @@ class Settings(BaseSettings):
     DEBUG: bool
 
     LLM_PROVIDER: LLMProvider
-    GEMINI_API_KEY: str
-    GEMINI_MODEL: str
-    OLLAMA_BASE_URL: str
-    OLLAMA_MODEL: str
 
-    DEEPSEEK_API_KEY: str = ""
-    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
-    DEEPSEEK_MODEL: str = "deepseek-chat"
+    # 统一 LLM 配置（所有 provider 通用）
+    LLM_API_KEY: str = ""
+    LLM_BASE_URL: str = ""
+    LLM_MODEL: str = ""
+
+    # 生成参数
+    LLM_TEMPERATURE: float = 0.7
+    LLM_MAX_TOKENS: int = 4096
+    LLM_TOP_P: float = 0.9
 
     # Embedding: openai_compat（阿里云百炼等 OpenAI 兼容接口）| ollama
     EMBEDDING_PROVIDER: EmbeddingProvider = "openai_compat"
     EMBEDDING_MODEL: str = "text-embedding-v4"
     EMBEDDING_API_KEY: str = ""
-    EMBEDDING_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    EMBEDDING_BASE_URL: str = ""
     # text-embedding-v4 可选维度；0 表示使用模型默认
     EMBEDDING_DIMENSIONS: int = 0
-    # ollama 时可单独指定；留空则回退到 OLLAMA_BASE_URL
-    EMBEDDING_BASE_URL_OLLAMA: str = ""
     # openai_compat 单次请求最大条数（百炼 text-embedding-v4 上限 20）
     EMBEDDING_BATCH_SIZE: int = 20
 
@@ -63,7 +63,6 @@ class Settings(BaseSettings):
     # 留空则按 DASHSCOPE_WORKSPACE_ID 自动拼接；sk-ws 密钥必填 workspace
     RERANK_BASE_URL: str = ""
     RERANK_INSTRUCT: str = ""
-    RERANK_BASE_URL_OLLAMA: str = ""
     RERANK_TIMEOUT_SECONDS: float = 60.0
     VECTOR_RECALL_K: int = 20
     RERANK_TOP_K: int = 4
@@ -116,20 +115,25 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_llm_config(self) -> "Settings":
         if self.LLM_PROVIDER == "gemini":
-            if not self.GEMINI_API_KEY.strip():
-                raise ValueError("GEMINI_API_KEY is required when LLM_PROVIDER=gemini")
-            if not self.GEMINI_MODEL.strip():
-                raise ValueError("GEMINI_MODEL is required when LLM_PROVIDER=gemini")
+            if not self.llm_api_key:
+                raise ValueError("LLM_API_KEY is required when LLM_PROVIDER=gemini")
+            if not self.llm_model:
+                raise ValueError("LLM_MODEL is required when LLM_PROVIDER=gemini")
         elif self.LLM_PROVIDER == "ollama":
-            if not self.OLLAMA_BASE_URL.strip():
-                raise ValueError("OLLAMA_BASE_URL is required when LLM_PROVIDER=ollama")
-            if not self.OLLAMA_MODEL.strip():
-                raise ValueError("OLLAMA_MODEL is required when LLM_PROVIDER=ollama")
+            if not self.llm_base_url:
+                raise ValueError("LLM_BASE_URL is required when LLM_PROVIDER=ollama")
+            if not self.llm_model:
+                raise ValueError("LLM_MODEL is required when LLM_PROVIDER=ollama")
         elif self.LLM_PROVIDER == "deepseek":
-            if not self.DEEPSEEK_API_KEY.strip():
-                raise ValueError("DEEPSEEK_API_KEY is required when LLM_PROVIDER=deepseek")
-            if not self.DEEPSEEK_MODEL.strip():
-                raise ValueError("DEEPSEEK_MODEL is required when LLM_PROVIDER=deepseek")
+            if not self.llm_api_key:
+                raise ValueError("LLM_API_KEY is required when LLM_PROVIDER=deepseek")
+            if not self.llm_model:
+                raise ValueError("LLM_MODEL is required when LLM_PROVIDER=deepseek")
+        elif self.LLM_PROVIDER == "bailian":
+            if not self.llm_api_key:
+                raise ValueError("LLM_API_KEY is required when LLM_PROVIDER=bailian")
+            if not self.llm_model:
+                raise ValueError("LLM_MODEL is required when LLM_PROVIDER=bailian")
 
         if self.EMBEDDING_PROVIDER == "openai_compat":
             if not self.EMBEDDING_API_KEY.strip():
@@ -147,9 +151,9 @@ class Settings(BaseSettings):
         elif self.EMBEDDING_PROVIDER == "ollama":
             if not self.EMBEDDING_MODEL.strip():
                 raise ValueError("EMBEDDING_MODEL is required when EMBEDDING_PROVIDER=ollama")
-            if not self.embedding_base_url.strip():
+            if not self.EMBEDDING_BASE_URL.strip():
                 raise ValueError(
-                    "EMBEDDING_BASE_URL_OLLAMA or OLLAMA_BASE_URL is required "
+                    "EMBEDDING_BASE_URL is required "
                     "when EMBEDDING_PROVIDER=ollama"
                 )
 
@@ -157,8 +161,7 @@ class Settings(BaseSettings):
             if self.RERANK_PROVIDER in {"openai_compat", "dashscope"}:
                 if not self.rerank_api_key.strip():
                     raise ValueError(
-                        "RERANK_API_KEY or EMBEDDING_API_KEY is required "
-                        f"when RERANK_PROVIDER={self.RERANK_PROVIDER}"
+                        f"RERANK_API_KEY is required when RERANK_PROVIDER={self.RERANK_PROVIDER}"
                     )
                 if not self.rerank_api_url.strip():
                     raise ValueError(
@@ -167,9 +170,9 @@ class Settings(BaseSettings):
             elif self.RERANK_PROVIDER == "ollama":
                 if not self.RERANK_MODEL.strip():
                     raise ValueError("RERANK_MODEL is required when RERANK_PROVIDER=ollama")
-                if not self.rerank_base_url_ollama.strip():
+                if not self.RERANK_BASE_URL.strip():
                     raise ValueError(
-                        "RERANK_BASE_URL_OLLAMA or OLLAMA_BASE_URL is required "
+                        "RERANK_BASE_URL is required "
                         "when RERANK_PROVIDER=ollama"
                     )
             if not self.RERANK_MODEL.strip():
@@ -178,9 +181,7 @@ class Settings(BaseSettings):
 
     @property
     def rerank_api_key(self) -> str:
-        if self.RERANK_API_KEY.strip():
-            return self.RERANK_API_KEY.strip()
-        return self.EMBEDDING_API_KEY.strip()
+        return self.RERANK_API_KEY.strip()
 
     @property
     def dashscope_workspace_host(self) -> str | None:
@@ -203,18 +204,6 @@ class Settings(BaseSettings):
         return "https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank"
 
     @property
-    def rerank_base_url_ollama(self) -> str:
-        if self.RERANK_BASE_URL_OLLAMA.strip():
-            return self.RERANK_BASE_URL_OLLAMA.strip()
-        return self.OLLAMA_BASE_URL.strip()
-
-    @property
-    def embedding_base_url(self) -> str:
-        if self.EMBEDDING_BASE_URL_OLLAMA.strip():
-            return self.EMBEDDING_BASE_URL_OLLAMA.strip()
-        return self.OLLAMA_BASE_URL.strip()
-
-    @property
     def allowed_upload_extensions(self) -> set[str]:
         return {
             ext.strip().lower().lstrip(".")
@@ -225,6 +214,41 @@ class Settings(BaseSettings):
     @property
     def UPLOAD_MAX_SIZE_BYTES(self) -> int:
         return int(self.UPLOAD_MAX_SIZE_MB) * 1024 * 1024
+
+    # ---- LLM computed properties ----
+
+    @property
+    def llm_api_key(self) -> str:
+        return self.LLM_API_KEY.strip()
+
+    @property
+    def llm_base_url(self) -> str:
+        if self.LLM_BASE_URL.strip():
+            return self.LLM_BASE_URL.strip()
+        # provider 默认值
+        match self.LLM_PROVIDER:
+            case "deepseek":
+                return "https://api.deepseek.com"
+            case "bailian":
+                host = self.dashscope_workspace_host
+                if host:
+                    return f"{host}/compatible-mode/v1"
+                return "https://dashscope.aliyuncs.com/compatible-mode/v1"
+            case _:
+                return ""
+
+    @property
+    def llm_model(self) -> str:
+        if self.LLM_MODEL.strip():
+            return self.LLM_MODEL.strip()
+        # provider 默认模型
+        match self.LLM_PROVIDER:
+            case "deepseek":
+                return "deepseek-chat"
+            case "bailian":
+                return "qwen-plus"
+            case _:
+                return ""
 
     @property
     def DATABASE_URL(self) -> str:

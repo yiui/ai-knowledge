@@ -24,7 +24,7 @@ def create_embeddings() -> Embeddings:
 
             base = OllamaEmbeddings(
                 model=settings.EMBEDDING_MODEL,
-                base_url=settings.embedding_base_url,
+                base_url=settings.EMBEDDING_BASE_URL,
             )
             return BatchEmbeddings(base, settings.EMBEDDING_BATCH_SIZE)
         case other:

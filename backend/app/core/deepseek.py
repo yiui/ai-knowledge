@@ -10,7 +10,7 @@ _client: httpx.Client | None = None
 
 def _headers() -> dict[str, str]:
     return {
-        "Authorization": f"Bearer {settings.DEEPSEEK_API_KEY}",
+        "Authorization": f"Bearer {settings.llm_api_key}",
         "Content-Type": "application/json",
     }
 
@@ -18,17 +18,21 @@ def _headers() -> dict[str, str]:
 def _get_client() -> httpx.Client:
     global _client
     if _client is None:
-        base_url = settings.DEEPSEEK_BASE_URL.rstrip("/")
+        base_url = settings.llm_base_url.rstrip("/")
         _client = httpx.Client(base_url=base_url, timeout=120.0)
     return _client
 
 
 def _build_payload(prompt: str, *, stream: bool) -> dict:
-    return {
-        "model": settings.DEEPSEEK_MODEL,
+    payload: dict = {
+        "model": settings.llm_model,
         "messages": [{"role": "user", "content": prompt}],
         "stream": stream,
+        "temperature": settings.LLM_TEMPERATURE,
+        "max_tokens": settings.LLM_MAX_TOKENS,
+        "top_p": settings.LLM_TOP_P,
     }
+    return payload
 
 
 def ask_deepseek(prompt: str) -> str:
@@ -43,12 +47,16 @@ def ask_deepseek(prompt: str) -> str:
 
 
 def stream_deepseek(prompt: str) -> Iterator[str]:
+    import logging
+    log = logging.getLogger("deepseek")
     with _get_client().stream(
         "POST",
         "/chat/completions",
         headers=_headers(),
         json=_build_payload(prompt, stream=True),
     ) as response:
+        log.info("stream request url=%s/chat/completions status=%s",
+                 _get_client().base_url, response.status_code)
         response.raise_for_status()
         for line in response.iter_lines():
             if not line or not line.startswith("data: "):
@@ -59,6 +67,7 @@ def stream_deepseek(prompt: str) -> Iterator[str]:
             try:
                 chunk = json.loads(payload)
             except json.JSONDecodeError:
+                log.warning("skip unparseable line: %s", line[:200])
                 continue
             choices = chunk.get("choices") or []
             if not choices:

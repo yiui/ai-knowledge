@@ -144,7 +144,7 @@ class OllamaRerankClient:
         documents: list[str],
         top_n: int,
     ) -> list[tuple[int, float]]:
-        base = settings.rerank_base_url_ollama.rstrip("/")
+        base = settings.RERANK_BASE_URL.rstrip("/")
         payload: dict = {
             "model": settings.RERANK_MODEL,
             "query": query,

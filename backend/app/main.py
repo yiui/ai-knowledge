@@ -153,36 +153,24 @@ async def health():
 async def config():
     llm_config = {
         "provider": settings.LLM_PROVIDER,
+        "model": settings.llm_model,
+        "base_url": settings.llm_base_url,
     }
-    if settings.LLM_PROVIDER == "gemini":
-        llm_config["model"] = settings.GEMINI_MODEL
-    elif settings.LLM_PROVIDER == "deepseek":
-        llm_config["model"] = settings.DEEPSEEK_MODEL
-        llm_config["base_url"] = settings.DEEPSEEK_BASE_URL
-    else:
-        llm_config["model"] = settings.OLLAMA_MODEL
-        llm_config["base_url"] = settings.OLLAMA_BASE_URL
 
     embedding_config = {
         "provider": settings.EMBEDDING_PROVIDER,
         "model": settings.EMBEDDING_MODEL,
+        "base_url": settings.EMBEDDING_BASE_URL,
     }
-    if settings.EMBEDDING_PROVIDER == "openai_compat":
-        embedding_config["base_url"] = settings.EMBEDDING_BASE_URL
-        if settings.EMBEDDING_DIMENSIONS > 0:
-            embedding_config["dimensions"] = settings.EMBEDDING_DIMENSIONS
-    else:
-        embedding_config["base_url"] = settings.embedding_base_url
+    if settings.EMBEDDING_DIMENSIONS > 0:
+        embedding_config["dimensions"] = settings.EMBEDDING_DIMENSIONS
 
     rerank_config = {
         "enabled": settings.RERANK_ENABLED,
         "provider": settings.RERANK_PROVIDER,
         "model": settings.RERANK_MODEL,
+        "base_url": settings.RERANK_BASE_URL,
     }
-    if settings.RERANK_PROVIDER in {"openai_compat", "dashscope"}:
-        rerank_config["base_url"] = settings.rerank_api_url
-    elif settings.RERANK_PROVIDER == "ollama":
-        rerank_config["base_url"] = settings.rerank_base_url_ollama
 
     return {
         "app_name": settings.APP_NAME,

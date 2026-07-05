@@ -54,6 +54,9 @@
               :value="kb.id"
             />
           </el-select>
+          <span v-if="llmModel" class="model-tag">
+            {{ llmProvider }} / {{ llmModel }}
+          </span>
           <span class="msg-count">
             {{ messageCount }}/{{ maxMessages }} 条消息
           </span>
@@ -102,6 +105,7 @@
 import { nextTick, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
+import { getAppConfig } from '../api/config'
 import { listKnowledgeBases } from '../api/knowledgeBase'
 import {
   chatStreamInConversation,
@@ -124,6 +128,8 @@ const messageCount = ref(0)
 const maxMessages = ref(50)
 const shouldStartNew = ref(false)
 const chatBoxRef = ref(null)
+const llmProvider = ref('')
+const llmModel = ref('')
 
 let localKeySeq = 0
 
@@ -238,6 +244,14 @@ const send = async () => {
 }
 
 onMounted(async () => {
+  try {
+    const cfg = await getAppConfig()
+    if (cfg.llm) {
+      llmProvider.value = cfg.llm.provider
+      llmModel.value = cfg.llm.model
+    }
+  } catch { /* config 加载失败不影响核心功能 */ }
+
   const limits = await getChatLimits()
   maxMessages.value = limits.max_messages_per_conversation
   kbs.value = await listKnowledgeBases()
@@ -350,8 +364,16 @@ onMounted(async () => {
   font-size: 14px;
 }
 
-.msg-count {
+.model-tag {
   margin-left: auto;
+  font-size: 12px;
+  color: #1677ff;
+  background: #e6f4ff;
+  padding: 2px 10px;
+  border-radius: 10px;
+}
+
+.msg-count {
   font-size: 13px;
   color: #999;
 }
