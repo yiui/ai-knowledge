@@ -283,7 +283,7 @@ const searchText = ref('')
 const statusFilter = ref('')
 const selectedDocs = ref<DocumentItem[]>([])
 const batchDeleting = ref(false)
-const docTableRef = ref<InstanceType<typeof import('element-plus').ElTable> | null>(null)
+const docTableRef = ref<any>(null)
 
 const clearTableSelection = () => {
   docTableRef.value?.clearSelection()
