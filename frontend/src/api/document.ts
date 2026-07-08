@@ -17,9 +17,43 @@ export const uploadDocument = async (file: File, knowledgeBaseId: number) => {
   return res.data
 }
 
-export const getDocuments = async (knowledgeBaseId: number) => {
-  const res = await http.get('/documents', {
-    params: { knowledge_base_id: knowledgeBaseId },
+export interface DocumentItem {
+  id: number
+  filename: string
+  size: string
+  created_at: string
+  knowledge_base_id: number
+  status: string
+  error_message: string | null
+  vector_count: number
+}
+
+export interface DocumentListResponse {
+  items: DocumentItem[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface DocumentQueryParams {
+  knowledgeBaseId: number
+  page?: number
+  pageSize?: number
+  search?: string
+  status?: string
+}
+
+export const getDocuments = async (
+  params: DocumentQueryParams,
+): Promise<DocumentListResponse> => {
+  const res = await http.get<DocumentListResponse>('/documents', {
+    params: {
+      knowledge_base_id: params.knowledgeBaseId,
+      page: params.page ?? 1,
+      page_size: params.pageSize ?? 20,
+      ...(params.search ? { search: params.search } : {}),
+      ...(params.status ? { status: params.status } : {}),
+    },
   })
   return res.data
 }
@@ -31,5 +65,10 @@ export const reindexDocument = async (id: number) => {
 
 export const deleteDocument = async (id: number) => {
   const res = await http.delete(`/documents/${id}`)
+  return res.data
+}
+
+export const batchDeleteDocuments = async (ids: number[]) => {
+  const res = await http.post('/documents/batch-delete', { ids })
   return res.data
 }

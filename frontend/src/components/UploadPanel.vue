@@ -1,11 +1,153 @@
 <template>
   <div class="layout">
-    <div class="upload-panel">
-      <h2>上传文档</h2>
+    <!-- 头栏：标题 + 统计 + 刷新 -->
+    <div class="doc-header">
+      <div class="doc-header__left">
+        <h3 class="doc-header__title">📄 已上传文档</h3>
+        <span class="doc-header__count">
+          共 <strong>{{ totalDocs }}</strong> 个
+        </span>
+      </div>
+      <el-button size="small" @click="refreshDocs">刷新</el-button>
+    </div>
 
+    <!-- 搜索栏 -->
+    <div class="search-bar">
+      <el-input
+        v-model="searchText"
+        placeholder="搜索文件名..."
+        size="small"
+        clearable
+        class="search-bar__input"
+        @keyup.enter="handleSearch"
+        @clear="handleSearch"
+      >
+        <template #prefix>
+          <span>🔍</span>
+        </template>
+      </el-input>
+      <el-select
+        v-model="statusFilter"
+        placeholder="状态筛选"
+        size="small"
+        clearable
+        style="width: 130px"
+        @change="handleSearch"
+      >
+        <el-option label="全部状态" value="" />
+        <el-option label="就绪" value="ready" />
+        <el-option label="处理中" value="processing" />
+        <el-option label="等待处理" value="pending" />
+        <el-option label="失败" value="failed" />
+      </el-select>
+    </div>
+
+    <!-- 操作栏：上传 + 批量（固定高度，表格不跳动） -->
+    <div class="action-bar">
+      <el-button type="primary" size="small" @click="openUploadDialog">
+        📤 上传文档
+      </el-button>
+      <div v-if="selectedDocs.length > 0" class="action-bar__batch">
+        <span class="action-bar__info">
+          已选 <strong>{{ selectedDocs.length }}</strong> 项
+        </span>
+        <el-button size="small" @click="clearTableSelection">取消选择</el-button>
+        <el-button
+          type="danger"
+          size="small"
+          :loading="batchDeleting"
+          @click="handleBatchDelete"
+        >
+          批量删除
+        </el-button>
+      </div>
+    </div>
+
+    <!-- 文档表格 -->
+    <el-table
+      ref="docTableRef"
+      :data="docItems"
+      v-loading="docsLoading"
+      stripe
+      size="small"
+      class="doc-table"
+      empty-text="暂无文档"
+      @selection-change="onSelectionChange"
+    >
+      <el-table-column type="selection" width="40" />
+      <el-table-column prop="filename" label="文件名" min-width="200">
+        <template #default="{ row }">
+          <div class="doc-filename">
+            <span class="doc-filename__icon">📄</span>
+            <span class="doc-filename__text" :title="row.filename">{{ row.filename }}</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column prop="size" label="大小" width="100" align="right" />
+      <el-table-column label="状态" width="120" align="center">
+        <template #default="{ row }">
+          <span :class="['status-tag', `status-tag--${row.status}`]">
+            {{ statusLabel(row.status) }}
+          </span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="vector_count" label="向量块" width="90" align="right" />
+      <el-table-column label="上传时间" width="180">
+        <template #default="{ row }">
+          <span class="doc-time">{{ formatToCNTime(row.created_at) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="140" align="center" fixed="right">
+        <template #default="{ row }">
+          <div class="doc-actions">
+            <el-button
+              v-if="row.status === 'failed' || row.status === 'processing'"
+              type="primary"
+              link
+              size="small"
+              :loading="retryingIds.includes(row.id)"
+              @click="retryDoc(row.id)"
+            >
+              重试
+            </el-button>
+            <el-button
+              type="danger"
+              link
+              size="small"
+              @click="removeDoc(row.id)"
+            >
+              删除
+            </el-button>
+          </div>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <!-- 分页 -->
+    <div class="doc-pagination">
+      <el-pagination
+        v-model:current-page="currentPage"
+        v-model:page-size="pageSize"
+        :total="totalDocs"
+        :page-sizes="[10, 20, 50]"
+        layout="total, sizes, prev, pager, next, jumper"
+        background
+        small
+        @current-change="loadDocs"
+        @size-change="onPageSizeChange"
+      />
+    </div>
+
+    <!-- 上传弹窗 -->
+    <el-dialog
+      v-model="showUploadDialog"
+      title="上传文档"
+      width="560px"
+      :close-on-click-modal="false"
+      destroy-on-close
+    >
       <p v-if="uploadLimits" class="upload-hint">{{ uploadLimits.hint }}</p>
 
-      <!-- 拖拽上传区 -->
       <div
         :class="['drop-zone', { 'drop-zone--active': dragOver }]"
         @dragover.prevent="onDragOver"
@@ -21,7 +163,6 @@
         </div>
       </div>
 
-      <!-- 隐藏的文件选择 input -->
       <input
         ref="fileInputRef"
         type="file"
@@ -43,8 +184,7 @@
       <div v-if="queue.length > 0" class="queue-panel">
         <div class="queue-header">
           <span>
-            📋 上传队列
-            ({{ doneCount }}/{{ queue.length }} 完成)
+            📋 上传队列 ({{ doneCount }}/{{ queue.length }} 完成)
           </span>
           <el-button
             v-if="doneCount > 0"
@@ -77,60 +217,26 @@
           </li>
         </ul>
       </div>
-    </div>
 
-    <!-- 已上传文档列表（保持不变） -->
-    <div class="doc-panel">
-      <h3>已上传文档</h3>
-
-      <div v-if="docs.length === 0">
-        暂无文档
-      </div>
-
-      <ul>
-        <li v-for="doc in docs" :key="doc.id" class="doc-item">
-          <div class="name">
-            <span>📄 {{ doc.filename }}</span>
-            <span :class="['status-badge', `status-${doc.status}`]">
-              {{ statusLabel(doc.status) }}
-            </span>
-          </div>
-
-          <div class="meta">
-            <span>📦 {{ doc.size }}</span>
-            <span>🕒 {{ formatToCNTime(doc.created_at) }}</span>
-            <span v-if="doc.status === 'ready'" class="vector-info">
-              🧬 {{ doc.vector_count ?? 0 }} chunks
-            </span>
-          </div>
-
-          <div v-if="doc.status === 'failed' && doc.error_message" class="err-msg">
-            ❌ {{ doc.error_message }}
-          </div>
-
-          <div class="actions">
-            <button
-              v-if="doc.status === 'failed' || doc.status === 'processing'"
-              class="retry-btn"
-              :disabled="retryingIds.includes(doc.id)"
-              @click="retryDoc(doc.id)"
-            >
-              {{ retryingIds.includes(doc.id) ? '重试中…' : '重试' }}
-            </button>
-            <button class="del-btn" @click="removeDoc(doc.id)">
-              删除
-            </button>
-          </div>
-        </li>
-      </ul>
-    </div>
+      <template #footer>
+        <el-button @click="showUploadDialog = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { ElMessageBox } from 'element-plus'
 import { getAppConfig } from '../api/config'
-import { uploadDocument, getDocuments, deleteDocument, reindexDocument } from '../api/document'
+import {
+  uploadDocument,
+  getDocuments,
+  deleteDocument,
+  batchDeleteDocuments,
+  reindexDocument,
+  type DocumentItem,
+} from '../api/document'
 import {
   buildAcceptAttr,
   getMaxSizeBytes,
@@ -147,6 +253,13 @@ const props = defineProps({
   },
 })
 
+// ---- 上传弹窗 ----
+const showUploadDialog = ref(false)
+
+const openUploadDialog = () => {
+  showUploadDialog.value = true
+}
+
 // ---- 上传队列 ----
 
 interface UploadTask {
@@ -159,9 +272,25 @@ interface UploadTask {
 const queue = ref<UploadTask[]>([])
 let nextTaskId = 0
 
-// ---- 文档列表 ----
+// ---- 文档列表 & 分页 ----
 
-const docs = ref<any[]>([])
+const docItems = ref<DocumentItem[]>([])
+const docsLoading = ref(false)
+const totalDocs = ref(0)
+const currentPage = ref(1)
+const pageSize = ref(20)
+const searchText = ref('')
+const statusFilter = ref('')
+const selectedDocs = ref<DocumentItem[]>([])
+const batchDeleting = ref(false)
+const docTableRef = ref<InstanceType<typeof import('element-plus').ElTable> | null>(null)
+
+const clearTableSelection = () => {
+  docTableRef.value?.clearSelection()
+}
+
+// ---- 上传限制 ----
+
 const uploadLimits = ref<UploadLimits | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const folderInputRef = ref<HTMLInputElement | null>(null)
@@ -232,12 +361,50 @@ const loadUploadLimits = async () => {
 
 const loadDocs = async () => {
   if (props.knowledgeBaseId == null) return
-  docs.value = await getDocuments(props.knowledgeBaseId)
+  docsLoading.value = true
+  try {
+    const res = await getDocuments({
+      knowledgeBaseId: props.knowledgeBaseId,
+      page: currentPage.value,
+      pageSize: pageSize.value,
+      search: searchText.value || undefined,
+      status: statusFilter.value || undefined,
+    })
+    docItems.value = res.items
+    totalDocs.value = res.total
+  } catch {
+    docItems.value = []
+    totalDocs.value = 0
+  } finally {
+    docsLoading.value = false
+  }
+}
+
+const refreshDocs = () => {
+  currentPage.value = 1
+  loadDocs()
+}
+
+const handleSearch = () => {
+  currentPage.value = 1
+  loadDocs()
+}
+
+const onPageSizeChange = () => {
+  currentPage.value = 1
+  loadDocs()
+}
+
+const onSelectionChange = (rows: DocumentItem[]) => {
+  selectedDocs.value = rows
 }
 
 watch(
   () => props.knowledgeBaseId,
   () => {
+    currentPage.value = 1
+    searchText.value = ''
+    statusFilter.value = ''
     loadDocs()
   },
   { immediate: true },
@@ -249,7 +416,7 @@ let pollTimer: ReturnType<typeof setInterval> | null = null
 const startPolling = () => {
   if (pollTimer) return
   pollTimer = setInterval(async () => {
-    const hasProcessing = docs.value.some(
+    const hasProcessing = docItems.value.some(
       (d) => d.status === 'pending' || d.status === 'processing',
     )
     if (!hasProcessing) {
@@ -272,7 +439,7 @@ const stopPolling = () => {
 }
 
 watch(
-  () => docs.value.map((d) => d.status).join(','),
+  () => docItems.value.map((d) => d.status).join(','),
   (next) => {
     if (next.includes('pending') || next.includes('processing')) {
       startPolling()
@@ -360,7 +527,6 @@ async function traverseFileTree(
     result.push(file)
   } else if (entry.isDirectory) {
     const reader = (entry as FileSystemDirectoryEntry).createReader()
-    // readEntries 每次最多返回一批，需要循环读取
     const allEntries: FileSystemEntry[] = []
     let batch: FileSystemEntry[]
     do {
@@ -429,6 +595,7 @@ const processQueue = async () => {
   processing = false
 
   // 刷新文档列表并启动轮询
+  currentPage.value = 1
   await loadDocs()
   startPolling()
 }
@@ -442,9 +609,35 @@ const clearDone = () => {
 // ---- 文档操作 ----
 
 const removeDoc = async (id: number) => {
-  if (!confirm('确定删除该文档吗？相关向量也会一并删除。')) return
-  await deleteDocument(id)
-  await loadDocs()
+  try {
+    await ElMessageBox.confirm('确定删除该文档吗？相关向量也会一并删除。', '确认删除', {
+      type: 'warning',
+    })
+    await deleteDocument(id)
+    await loadDocs()
+  } catch {
+    // cancelled
+  }
+}
+
+const handleBatchDelete = async () => {
+  const ids = selectedDocs.value.map((d) => d.id)
+  if (ids.length === 0) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除选中的 ${ids.length} 个文档吗？相关向量也会一并删除。`,
+      '批量删除',
+      { type: 'warning' },
+    )
+    batchDeleting.value = true
+    await batchDeleteDocuments(ids)
+    clearTableSelection()
+    await loadDocs()
+  } catch {
+    // cancelled or failed
+  } finally {
+    batchDeleting.value = false
+  }
 }
 
 const retryDoc = async (id: number) => {
@@ -454,7 +647,7 @@ const retryDoc = async (id: number) => {
     await loadDocs()
     startPolling()
   } catch (e: any) {
-    // 静默失败，轮询会反映状态
+    // 静默失败
   } finally {
     retryingIds.value = retryingIds.value.filter((x) => x !== id)
   }
@@ -464,28 +657,178 @@ const retryDoc = async (id: number) => {
 <style scoped>
 .layout {
   display: flex;
+  flex-direction: column;
   height: 100%;
+  overflow: hidden;
 }
 
-.upload-panel {
-  width: 40%;
-  padding: 20px;
-  border-right: 1px solid #eee;
+/* ---- 头栏 ---- */
+
+.doc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  border-bottom: 1px solid #eee;
+  flex-shrink: 0;
 }
+
+.doc-header__left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.doc-header__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.doc-header__count {
+  font-size: 13px;
+  color: #666;
+}
+
+.doc-header__count strong {
+  font-weight: 600;
+  color: #333;
+}
+
+/* ---- 搜索栏 ---- */
+
+.search-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 20px;
+  border-bottom: 1px solid #eee;
+  flex-shrink: 0;
+}
+
+.search-bar__input {
+  width: 320px;
+}
+
+/* ---- 操作栏 ---- */
+
+.action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 20px;
+  border-bottom: 1px solid #eee;
+  flex-shrink: 0;
+  min-height: 40px;
+}
+
+.action-bar__batch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-bar__info {
+  font-size: 13px;
+  color: #1677ff;
+}
+
+.action-bar__info strong {
+  font-weight: 600;
+}
+
+.doc-table {
+  flex: 1;
+  font-size: 13px;
+}
+
+.doc-table :deep(th) {
+  font-weight: 600;
+  color: #555;
+}
+
+.doc-filename {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.doc-filename__icon {
+  flex-shrink: 0;
+}
+
+.doc-filename__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-time {
+  font-size: 12px;
+  color: #888;
+}
+
+.doc-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+}
+
+/* ---- 状态标签 ---- */
+
+.status-tag {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.status-tag--pending {
+  background: #f0f0f0;
+  color: #666;
+}
+
+.status-tag--processing {
+  background: #e6f4ff;
+  color: #1677ff;
+}
+
+.status-tag--ready {
+  background: #f6ffed;
+  color: #389e0d;
+}
+
+.status-tag--failed {
+  background: #fff1f0;
+  color: #cf1322;
+}
+
+/* ---- 分页 ---- */
+
+.doc-pagination {
+  padding: 10px 20px;
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid #eee;
+  flex-shrink: 0;
+  background: #fff;
+}
+
+/* ---- 上传弹窗 ---- */
 
 .upload-hint {
   font-size: 13px;
   color: #666;
-  margin: 0 0 12px;
+  margin: 0 0 16px;
   line-height: 1.5;
 }
-
-/* ---- 拖拽区 ---- */
 
 .drop-zone {
   border: 2px dashed #d9d9d9;
   border-radius: 8px;
-  padding: 24px 16px;
+  padding: 28px 16px;
   text-align: center;
   transition: border-color 0.2s, background 0.2s;
   cursor: pointer;
@@ -498,7 +841,7 @@ const retryDoc = async (id: number) => {
 }
 
 .drop-zone__icon {
-  font-size: 32px;
+  font-size: 36px;
   margin-bottom: 8px;
 }
 
@@ -526,7 +869,7 @@ const retryDoc = async (id: number) => {
   align-items: center;
   font-size: 13px;
   font-weight: 500;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .queue-list {
@@ -596,118 +939,5 @@ const retryDoc = async (id: number) => {
 
 .queue-item--success {
   background: #f6ffed;
-}
-
-/* ---- 文档列表 ---- */
-
-.doc-panel {
-  width: 60%;
-  padding: 20px;
-  overflow: auto;
-}
-
-ul {
-  padding: 0;
-}
-
-li {
-  list-style: none;
-  padding: 10px;
-  border-bottom: 1px solid #eee;
-}
-
-.doc-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.name {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 500;
-}
-
-.meta {
-  display: flex;
-  gap: 12px;
-  font-size: 12px;
-  color: #888;
-  align-items: center;
-}
-
-.vector-info {
-  color: #52c41a;
-}
-
-.err-msg {
-  font-size: 12px;
-  color: #ff4d4f;
-  background: #fff1f0;
-  border: 1px solid #ffccc7;
-  border-radius: 4px;
-  padding: 4px 8px;
-  word-break: break-all;
-}
-
-.actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 4px;
-}
-
-.status-badge {
-  display: inline-block;
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-weight: 500;
-  line-height: 1.4;
-}
-
-.status-pending {
-  background: #f0f0f0;
-  color: #666;
-}
-.status-processing {
-  background: #e6f4ff;
-  color: #1677ff;
-}
-.status-ready {
-  background: #f6ffed;
-  color: #389e0d;
-}
-.status-failed {
-  background: #fff1f0;
-  color: #cf1322;
-}
-
-.del-btn,
-.retry-btn {
-  padding: 4px 10px;
-  font-size: 12px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  color: white;
-}
-
-.del-btn {
-  background: #ff4d4f;
-}
-.del-btn:hover {
-  background: #d9363e;
-}
-
-.retry-btn {
-  background: #1677ff;
-}
-.retry-btn:hover:not(:disabled) {
-  background: #0958d9;
-}
-.retry-btn:disabled {
-  background: #91caff;
-  cursor: not-allowed;
 }
 </style>

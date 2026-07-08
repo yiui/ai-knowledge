@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, BackgroundTasks, Body
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
@@ -97,6 +98,10 @@ def upload_document(
 @router.get("/documents")
 def get_documents(
     knowledge_base_id: int = Query(..., description="知识库 ID"),
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=100, description="每页条数"),
+    search: str | None = Query(None, description="按文件名搜索"),
+    status: str | None = Query(None, description="按状态筛选"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -104,13 +109,27 @@ def get_documents(
     if not kb:
         raise HTTPException(status_code=404, detail="知识库不存在")
 
-    docs = (
+    base_q = (
         db.query(Document)
         .filter(Document.knowledge_base_id == knowledge_base_id)
+    )
+
+    if search:
+        base_q = base_q.filter(Document.filename.ilike(f"%{search}%"))
+    if status:
+        base_q = base_q.filter(Document.status == status)
+
+    total = base_q.count()
+
+    docs = (
+        base_q
         .order_by(Document.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
         .all()
     )
-    return [
+
+    items = [
         {
             "id": doc.id,
             "filename": doc.filename,
@@ -123,6 +142,13 @@ def get_documents(
         }
         for doc in docs
     ]
+
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
 
 
 @router.post("/documents/{doc_id}/reindex")
@@ -202,6 +228,45 @@ def delete_document(
     delete_document_vectors(doc_id, kb_id)
 
     return {"message": "deleted", "id": doc_id}
+
+
+class BatchDeleteRequest(BaseModel):
+    ids: list[int]
+
+
+@router.post("/documents/batch-delete")
+def batch_delete_documents(
+    body: BatchDeleteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """批量删除文档（仅删除属于当前用户的文档）。"""
+    if not body.ids:
+        raise HTTPException(status_code=400, detail="请提供要删除的文档 ID 列表")
+
+    docs = (
+        db.query(Document)
+        .filter(
+            Document.id.in_(body.ids),
+            Document.user_id == current_user.id,
+        )
+        .all()
+    )
+
+    deleted = 0
+    for doc in docs:
+        kb_id = doc.knowledge_base_id
+        db.delete(doc)
+        minio_client.remove_object(
+            bucket_name=settings.MINIO_BUCKET,
+            object_name=doc.path,
+        )
+        delete_document_vectors(doc.id, kb_id)
+        deleted += 1
+
+    db.commit()
+
+    return {"message": f"已删除 {deleted} 个文档", "deleted": deleted}
 
 
 def format_size(size: int) -> str:
