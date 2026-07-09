@@ -235,6 +235,7 @@ import {
   deleteDocument,
   batchDeleteDocuments,
   reindexDocument,
+  getDocumentStatuses,
   type DocumentItem,
 } from '../api/document'
 import {
@@ -276,6 +277,7 @@ let nextTaskId = 0
 
 const docItems = ref<DocumentItem[]>([])
 const docsLoading = ref(false)
+const docsPolling = ref(false)
 const totalDocs = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -359,9 +361,13 @@ const loadUploadLimits = async () => {
 
 // ---- 文档列表加载 ----
 
-const loadDocs = async () => {
+const loadDocs = async (opts?: { silent?: boolean }) => {
   if (props.knowledgeBaseId == null) return
-  docsLoading.value = true
+  if (!opts?.silent) {
+    docsLoading.value = true
+  } else {
+    docsPolling.value = true
+  }
   try {
     const res = await getDocuments({
       knowledgeBaseId: props.knowledgeBaseId,
@@ -373,10 +379,13 @@ const loadDocs = async () => {
     docItems.value = res.items
     totalDocs.value = res.total
   } catch {
-    docItems.value = []
-    totalDocs.value = 0
+    if (!opts?.silent) {
+      docItems.value = []
+      totalDocs.value = 0
+    }
   } finally {
     docsLoading.value = false
+    docsPolling.value = false
   }
 }
 
@@ -410,25 +419,69 @@ watch(
   { immediate: true },
 )
 
-// ---- 轮询 ----
+// ---- 轮询：仅用轻量端点原地修补状态，表格不闪不跳 ----
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
+let pollInterval = 5000 // 基础 5 秒
+let noChangeRounds = 0
+
+const collectDirtyIds = (): number[] =>
+  docItems.value
+    .filter((d) => d.status === 'pending' || d.status === 'processing')
+    .map((d) => d.id)
+
+const pollDocStatuses = async () => {
+  const dirtyIds = collectDirtyIds()
+  if (dirtyIds.length === 0) {
+    stopPolling()
+    return
+  }
+
+  try {
+    const statuses = await getDocumentStatuses(props.knowledgeBaseId!, dirtyIds)
+    const map = new Map(statuses.map((s) => [s.id, s]))
+
+    let changed = false
+    for (const row of docItems.value) {
+      const fresh = map.get(row.id)
+      if (!fresh) continue
+      if (
+        fresh.status !== row.status ||
+        fresh.vector_count !== row.vector_count ||
+        fresh.error_message !== row.error_message
+      ) {
+        row.status = fresh.status
+        row.vector_count = fresh.vector_count
+        row.error_message = fresh.error_message
+        changed = true
+      }
+    }
+
+    // 自适应间隔：无变化加倍（上限 20s），有变化重置
+    if (changed) {
+      pollInterval = 5000
+      noChangeRounds = 0
+    } else {
+      noChangeRounds++
+      if (noChangeRounds >= 2) {
+        pollInterval = Math.min(pollInterval * 2, 20000)
+        noChangeRounds = 0
+      }
+    }
+
+    // 重置定时器以应用新间隔
+    if (pollTimer) clearInterval(pollTimer)
+    pollTimer = setInterval(pollDocStatuses, pollInterval)
+  } catch {
+    // 静默失败
+  }
+}
+
 const startPolling = () => {
   if (pollTimer) return
-  pollTimer = setInterval(async () => {
-    const hasProcessing = docItems.value.some(
-      (d) => d.status === 'pending' || d.status === 'processing',
-    )
-    if (!hasProcessing) {
-      stopPolling()
-      return
-    }
-    try {
-      await loadDocs()
-    } catch {
-      // 静默失败，下次继续
-    }
-  }, 2000)
+  pollInterval = 5000
+  noChangeRounds = 0
+  pollTimer = setInterval(pollDocStatuses, pollInterval)
 }
 
 const stopPolling = () => {
@@ -436,6 +489,7 @@ const stopPolling = () => {
     clearInterval(pollTimer)
     pollTimer = null
   }
+  docsPolling.value = false
 }
 
 watch(
@@ -594,7 +648,7 @@ const processQueue = async () => {
 
   processing = false
 
-  // 刷新文档列表并启动轮询
+  // 上传完成 → 全量刷新一次（跳到第 1 页），后续由轻量轮询负责
   currentPage.value = 1
   await loadDocs()
   startPolling()

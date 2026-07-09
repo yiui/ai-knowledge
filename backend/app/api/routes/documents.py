@@ -151,6 +151,45 @@ def get_documents(
     }
 
 
+@router.get("/documents/status")
+def get_document_statuses(
+    knowledge_base_id: int = Query(..., description="知识库 ID"),
+    ids: str = Query(..., description="逗号分隔的文档 ID 列表，如 1,3,7"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """轻量端点：仅返回指定文档的 status / vector_count / error_message。
+    前端轮询用，避免每次都拉全量分页列表。
+    """
+    kb = get_user_knowledge_base(db, knowledge_base_id, current_user.id)
+    if not kb:
+        raise HTTPException(status_code=404, detail="知识库不存在")
+
+    id_list = [int(x.strip()) for x in ids.split(",") if x.strip()]
+    if not id_list:
+        return []
+
+    docs = (
+        db.query(Document)
+        .filter(
+            Document.id.in_(id_list),
+            Document.knowledge_base_id == knowledge_base_id,
+            Document.user_id == current_user.id,
+        )
+        .all()
+    )
+
+    return [
+        {
+            "id": doc.id,
+            "status": doc.status,
+            "vector_count": doc.vector_count,
+            "error_message": doc.error_message,
+        }
+        for doc in docs
+    ]
+
+
 @router.post("/documents/{doc_id}/reindex")
 def reindex_document(
     doc_id: int,

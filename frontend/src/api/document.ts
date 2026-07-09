@@ -58,6 +58,24 @@ export const getDocuments = async (
   return res.data
 }
 
+export interface DocumentStatus {
+  id: number
+  status: string
+  vector_count: number
+  error_message: string | null
+}
+
+export const getDocumentStatuses = async (
+  knowledgeBaseId: number,
+  ids: number[],
+): Promise<DocumentStatus[]> => {
+  if (ids.length === 0) return []
+  const res = await http.get<DocumentStatus[]>('/documents/status', {
+    params: { knowledge_base_id: knowledgeBaseId, ids: ids.join(',') },
+  })
+  return res.data
+}
+
 export const reindexDocument = async (id: number) => {
   const res = await http.post(`/documents/${id}/reindex`)
   return res.data
