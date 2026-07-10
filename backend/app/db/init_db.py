@@ -89,8 +89,30 @@ def _migrate_documents_status_columns() -> None:
             ))
 
 
+def _migrate_messages_sources_column() -> None:
+    """向 messages 表加 sources JSONB 列（存 RAG 来源元数据）。"""
+    inspector = inspect(engine)
+    if "messages" not in inspector.get_table_names():
+        return
+    existing = {col["name"]: col for col in inspector.get_columns("messages")}
+    if "sources" not in existing:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "ALTER TABLE messages ADD COLUMN sources JSONB"
+            ))
+    else:
+        # 已存在但类型是 JSON，转为 JSONB（统一存储格式）
+        col_type = str(existing["sources"]["type"]).upper()
+        if "JSON" in col_type and "JSONB" not in col_type:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "ALTER TABLE messages ALTER COLUMN sources TYPE JSONB USING sources::jsonb"
+                ))
+
+
 def init_db():
     _migrate_users_table()
     _migrate_documents_table()
     Base.metadata.create_all(bind=engine)
     _migrate_documents_status_columns()
+    _migrate_messages_sources_column()

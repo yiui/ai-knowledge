@@ -203,9 +203,12 @@ def chat_stream_in_conversation(
 
     def event_generator():
         chunks: list[str] = []
+        sources_data: list[dict] | None = None
         try:
             for item in chat_service.chat_stream(question, user_id, kb_id):
                 if isinstance(item, dict):
+                    if "sources" in item:
+                        sources_data = item["sources"]
                     yield f"data: {json.dumps(item)}\n\n"
                 else:
                     chunks.append(item)
@@ -224,6 +227,7 @@ def chat_stream_in_conversation(
                     conversation_id=conv_id,
                     role="assistant",
                     content=answer or "（无回复）",
+                    sources=sources_data,
                 )
                 save_db.add(assistant_message)
                 conv_row = save_db.query(Conversation).filter(

@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -24,6 +25,7 @@ class Message(Base):
     )
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    sources: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     conversation: Mapped[Conversation] = relationship(

@@ -7,6 +7,7 @@ export interface Message {
   id: number
   role: 'user' | 'assistant'
   content: string
+  sources?: SourceMeta[] | null
   created_at: string
 }
 

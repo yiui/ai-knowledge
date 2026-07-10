@@ -7,14 +7,40 @@ from app.services.vector_service import search_hybrid, search_similar, get_adjac
 
 
 def _extract_source_meta(docs: list) -> list[dict]:
-    """从 LangChain Document 列表中提取来源元数据。"""
-    seen = set()
+    """从 LangChain Document 列表中提取来源元数据。
+
+    filename 优先读 chunk metadata；旧文档没有该字段时，通过 document_id
+    查 documents 表兜底。
+    """
+    # 收集需要查库兜底的 document_id
+    need_lookup: set[int] = set()
+    for d in docs:
+        if not d.metadata.get("filename"):
+            did = d.metadata.get("document_id")
+            if did is not None:
+                need_lookup.add(int(did))
+
+    # 批量查询 documents 表获取 filename
+    filename_map: dict[str, str] = {}
+    if need_lookup:
+        from app.db.session import SessionLocal
+        from app.models.document import Document
+        with SessionLocal() as db:
+            rows = (
+                db.query(Document.id, Document.filename)
+                .filter(Document.id.in_(need_lookup))
+                .all()
+            )
+            filename_map = {str(row[0]): row[1] for row in rows}
+
+    seen: set[tuple] = set()
     sources: list[dict] = []
     for d in docs:
-        filename = d.metadata.get("filename", "")
+        doc_id = str(d.metadata.get("document_id", ""))
+        filename = d.metadata.get("filename") or filename_map.get(doc_id, "")
         chunk_index = d.metadata.get("chunk_index")
         chunk_total = d.metadata.get("chunk_total")
-        key = (filename, chunk_index)
+        key = (doc_id, chunk_index)
         if key in seen:
             continue
         seen.add(key)
@@ -23,7 +49,6 @@ def _extract_source_meta(docs: list) -> list[dict]:
             "chunk_index": chunk_index if chunk_index is not None else 0,
             "chunk_total": chunk_total if chunk_total is not None else 0,
         })
-    # 按文件名 + 片段号排序
     sources.sort(key=lambda s: (s["filename"], s["chunk_index"]))
     return sources
 

@@ -17,6 +17,7 @@ class MessageResponse(BaseModel):
     id: int
     role: str
     content: str
+    sources: list[dict] | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
