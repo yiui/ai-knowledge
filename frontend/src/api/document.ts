@@ -91,6 +91,11 @@ export const batchDeleteDocuments = async (ids: number[]) => {
   return res.data
 }
 
+export const batchReindexDocuments = async (ids: number[]) => {
+  const res = await http.post('/documents/batch-reindex', { ids })
+  return res.data
+}
+
 export interface DocumentChunk {
   chunk_index: number
   chunk_total: number

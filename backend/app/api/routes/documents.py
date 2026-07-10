@@ -198,9 +198,9 @@ def reindex_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """把文档从 failed / processing 重新置为 pending，通过 BackgroundTasks 重新处理。
+    """重新处理文档：重新下载 → 解析 → 分块 → 向量化。
 
-    适用于：Embedding 临时故障修复后、用户主动重试。
+    任意状态均可调用，用于分块参数变更后批量重建向量。
     """
     doc = (
         db.query(Document)
@@ -213,12 +213,6 @@ def reindex_document(
 
     if not doc:
         raise HTTPException(status_code=404, detail="文档不存在")
-
-    if doc.status not in (DocumentStatus.FAILED.value, DocumentStatus.PROCESSING.value):
-        raise HTTPException(
-            status_code=400,
-            detail=f"当前状态 [{doc.status}] 不支持重试，仅 failed/processing 可重试",
-        )
 
     doc.status = DocumentStatus.PENDING.value
     doc.error_message = None
@@ -237,8 +231,52 @@ def reindex_document(
     return {
         "id": doc.id,
         "status": doc.status,
-        "message": "已提交重试，正在重新向量化",
+        "message": "已提交重处理，正在重新向量化",
     }
+
+
+class BatchDeleteRequest(BaseModel):
+    ids: list[int]
+
+
+@router.post("/documents/batch-reindex")
+def batch_reindex_documents(
+    body: BatchDeleteRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """批量重新处理文档：重置为 pending 并触发后台向量化任务。"""
+    if not body.ids:
+        raise HTTPException(status_code=400, detail="请提供要重处理的文档 ID 列表")
+
+    docs = (
+        db.query(Document)
+        .filter(
+            Document.id.in_(body.ids),
+            Document.user_id == current_user.id,
+        )
+        .all()
+    )
+
+    for doc in docs:
+        doc.status = DocumentStatus.PENDING.value
+        doc.error_message = None
+        doc.vector_count = 0
+
+    db.commit()
+
+    for doc in docs:
+        background_tasks.add_task(
+            process_document,
+            doc.id,
+            doc.path,
+            current_user.id,
+            doc.knowledge_base_id,
+            doc.filename,
+        )
+
+    return {"message": f"已提交 {len(docs)} 个文档的重处理任务", "count": len(docs)}
 
 
 @router.delete("/documents/{doc_id}")
@@ -269,10 +307,6 @@ def delete_document(
     delete_document_vectors(doc_id, kb_id)
 
     return {"message": "deleted", "id": doc_id}
-
-
-class BatchDeleteRequest(BaseModel):
-    ids: list[int]
 
 
 @router.post("/documents/batch-delete")

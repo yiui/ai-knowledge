@@ -53,6 +53,14 @@
         </span>
         <el-button size="small" @click="clearTableSelection">取消选择</el-button>
         <el-button
+          type="warning"
+          size="small"
+          :loading="batchReindexing"
+          @click="handleBatchReindex"
+        >
+          重新处理
+        </el-button>
+        <el-button
           type="danger"
           size="small"
           :loading="batchDeleting"
@@ -109,14 +117,13 @@
               预览
             </el-button>
             <el-button
-              v-if="row.status === 'failed' || row.status === 'processing'"
               type="primary"
               link
               size="small"
               :loading="retryingIds.includes(row.id)"
               @click="retryDoc(row.id)"
             >
-              重试
+              重处理
             </el-button>
             <el-button
               type="danger"
@@ -265,13 +272,14 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { getAppConfig } from '../api/config'
 import {
   uploadDocument,
   getDocuments,
   deleteDocument,
   batchDeleteDocuments,
+  batchReindexDocuments,
   reindexDocument,
   getDocumentStatuses,
   getDocumentChunks,
@@ -325,6 +333,7 @@ const searchText = ref('')
 const statusFilter = ref('')
 const selectedDocs = ref<DocumentItem[]>([])
 const batchDeleting = ref(false)
+const batchReindexing = ref(false)
 const docTableRef = ref<any>(null)
 
 const clearTableSelection = () => {
@@ -749,6 +758,28 @@ const handleBatchDelete = async () => {
     // cancelled or failed
   } finally {
     batchDeleting.value = false
+  }
+}
+
+const handleBatchReindex = async () => {
+  const ids = selectedDocs.value.map((d) => d.id)
+  if (ids.length === 0) return
+  try {
+    await ElMessageBox.confirm(
+      `确定重新处理选中的 ${ids.length} 个文档吗？将重新解析分块并向量化。`,
+      '批量重处理',
+      { type: 'warning' },
+    )
+    batchReindexing.value = true
+    await batchReindexDocuments(ids)
+    clearTableSelection()
+    await loadDocs()
+    startPolling()
+    ElMessage.success(`已提交 ${ids.length} 个文档的重处理任务`)
+  } catch {
+    // cancelled or failed
+  } finally {
+    batchReindexing.value = false
   }
 }
 
