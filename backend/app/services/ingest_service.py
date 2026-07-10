@@ -26,6 +26,7 @@ def _do_process_document(
     file_path: str,
     user_id: int,
     knowledge_base_id: int,
+    filename: str = "",
 ) -> int:
     """执行真正的处理流程：下载 → 解析 → 分块 → 向量化 → 写入。
 
@@ -34,7 +35,7 @@ def _do_process_document(
     local_path = download_from_minio(file_path)
     try:
         texts = parse_document(local_path)
-        chunks = split_documents(texts)
+        chunks = split_documents(texts, filename=filename)
 
         for chunk in chunks:
             chunk.metadata["document_id"] = document_id
@@ -88,6 +89,7 @@ def process_document_with_status(
     file_path: str,
     user_id: int,
     knowledge_base_id: int,
+    filename: str = "",
     *,
     max_retries: int = 3,
 ) -> bool:
@@ -104,6 +106,7 @@ def process_document_with_status(
             )
             count = _do_process_document(
                 document_id, file_path, user_id, knowledge_base_id,
+                filename=filename,
             )
             _set_status(
                 document_id,
@@ -139,6 +142,7 @@ def process_document(
     file_path: str,
     user_id: int,
     knowledge_base_id: int,
+    filename: str = "",
 ) -> None:
     """兼容旧 BackgroundTasks 调用的入口。
 
@@ -146,4 +150,5 @@ def process_document(
     """
     process_document_with_status(
         document_id, file_path, user_id, knowledge_base_id,
+        filename=filename,
     )

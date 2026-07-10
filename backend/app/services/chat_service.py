@@ -2,7 +2,7 @@ from collections.abc import Iterator
 
 from app.core.config import settings
 from app.core.llm import ask_llm, stream_llm
-from app.services.vector_service import search_hybrid, search_similar
+from app.services.vector_service import search_hybrid, search_similar, get_adjacent_chunks
 
 
 class ChatService:
@@ -30,28 +30,36 @@ class ChatService:
         *,
         stream: bool = False,
     ) -> tuple[str, list]:
-        # 使用混合检索（当启用时）或纯向量检索
+        # 使用配置的精排 Top K 作为最终送入 LLM 的 chunk 数
+        top_k = settings.RERANK_TOP_K
         if settings.HYBRID_SEARCH_ENABLED:
-            print("混合检索！")
             docs = search_hybrid(
                 question,
                 user_id=user_id,
                 knowledge_base_id=knowledge_base_id,
-                k=2,
+                k=top_k,
             )
         else:
-            print("向量检索！")
             docs = search_similar(
                 question,
                 user_id=user_id,
                 knowledge_base_id=knowledge_base_id,
-                k=2,
+                k=top_k,
             )
-        print("提问:", question)
-        for doc in docs:
-            print("召回结果:", doc.page_content)
-            print("-" * 100)
-        context = "\n\n".join([d.page_content for d in docs])
+
+        # 相邻 chunk 扩展：拉入同一文档的前后 chunk，解决跨 chunk 知识点断裂
+        adjacent = get_adjacent_chunks(docs, knowledge_base_id, user_id)
+        all_docs = list(docs) + adjacent
+
+        # 按 document_id + chunk_index 排序，保持原文阅读顺序
+        def _sort_key(d):
+            did = d.metadata.get("document_id", "")
+            idx = d.metadata.get("chunk_index", 0)
+            return (str(did), int(idx) if idx is not None else 0)
+
+        all_docs.sort(key=_sort_key)
+
+        context = "\n\n".join([d.page_content for d in all_docs])
         if stream:
             prompt = f"""
 你是企业知识库助手。
@@ -118,5 +126,4 @@ class ChatService:
                 knowledge_base_id,
                 stream=True,
             )
-            print("prompt:", prompt)
         yield from stream_llm(prompt)

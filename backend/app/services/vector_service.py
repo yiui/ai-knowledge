@@ -120,6 +120,71 @@ def search_hybrid(
     return fused[:top_k]
 
 
+def get_adjacent_chunks(
+    docs: list,
+    knowledge_base_id: int,
+    user_id: int,
+) -> list:
+    """获取已召回 chunk 的相邻 chunk（同一文档的 chunk_index ± 1）。
+
+    用于解决结构化知识点被分块切断的问题（如"产品三环靶"跨 3 个 chunk）。
+    """
+    from langchain_core.documents import Document as LCDocument
+
+    # 收集需要扩展的 (document_id, chunk_index) 对
+    targets: set[tuple[str, int]] = set()
+    for doc in docs:
+        doc_id = doc.metadata.get("document_id")
+        idx = doc.metadata.get("chunk_index")
+        if doc_id is not None and idx is not None:
+            targets.add((str(doc_id), int(idx)))
+
+    if not targets:
+        return []
+
+    # 为每个命中 chunk 计算 ±1 的相邻索引，排除已命中的索引
+    wanted: dict[str, set[int]] = {}  # document_id → set of chunk_index
+    already: set[tuple[str, int]] = set()
+    for doc_id, idx in targets:
+        already.add((doc_id, idx))
+        wanted.setdefault(doc_id, set()).update([idx - 1, idx + 1])
+
+    # 移除负数索引和已存在的索引
+    for doc_id in wanted:
+        wanted[doc_id] = {i for i in wanted[doc_id] if i >= 0 and (doc_id, i) not in already}
+
+    # 展平为 (document_id, chunk_index) 列表
+    flat = [(doc_id, idx) for doc_id, indices in wanted.items() for idx in indices]
+    if not flat:
+        return []
+
+    # 批量查询 PGVector
+    from app.db.session import engine
+    from sqlalchemy import text
+
+    with engine.connect() as conn:
+        # 构建 WHERE 条件：(cmetadata->>'document_id', cmetadata->>'chunk_index') IN (...)
+        values_clause = ", ".join([f"('{did}', '{idx}')" for did, idx in flat])
+        result = conn.execute(
+            text(f"""
+                SELECT document, cmetadata
+                FROM langchain_pg_embedding
+                WHERE cmetadata->>'knowledge_base_id' = :kb_id
+                  AND cmetadata->>'user_id' = :uid
+                  AND (cmetadata->>'document_id', cmetadata->>'chunk_index') IN ({values_clause})
+            """),
+            {"kb_id": str(knowledge_base_id), "uid": str(user_id)},
+        )
+        rows = result.fetchall()
+
+    adjacent: list[LCDocument] = []
+    for row in rows:
+        doc = LCDocument(page_content=row[0], metadata=row[1] or {})
+        adjacent.append(doc)
+
+    return adjacent
+
+
 def delete_document_vectors(document_id: int, knowledge_base_id: int):
     # 确保 PGVector 表已创建（首次调用时建表）
     _get_vector_store()

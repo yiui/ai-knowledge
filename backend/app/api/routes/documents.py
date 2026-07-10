@@ -80,6 +80,7 @@ def upload_document(
         doc.path,
         current_user.id,
         knowledge_base_id,
+        file.filename,
     )
 
     return {
@@ -230,6 +231,7 @@ def reindex_document(
         doc.path,
         current_user.id,
         doc.knowledge_base_id,
+        doc.filename,
     )
 
     return {
