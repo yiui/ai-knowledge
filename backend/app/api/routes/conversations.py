@@ -204,9 +204,12 @@ def chat_stream_in_conversation(
     def event_generator():
         chunks: list[str] = []
         try:
-            for chunk in chat_service.chat_stream(question, user_id, kb_id):
-                chunks.append(chunk)
-                yield f"data: {json.dumps({'text': chunk})}\n\n"
+            for item in chat_service.chat_stream(question, user_id, kb_id):
+                if isinstance(item, dict):
+                    yield f"data: {json.dumps(item)}\n\n"
+                else:
+                    chunks.append(item)
+                    yield f"data: {json.dumps({'text': item})}\n\n"
         except Exception as exc:  # noqa: BLE001
             import logging
             logging.getLogger("chat").exception("stream failed")

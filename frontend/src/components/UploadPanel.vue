@@ -97,9 +97,17 @@
           <span class="doc-time">{{ formatToCNTime(row.created_at) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="140" align="center" fixed="right">
+      <el-table-column label="操作" width="200" align="center" fixed="right">
         <template #default="{ row }">
           <div class="doc-actions">
+            <el-button
+              type="primary"
+              link
+              size="small"
+              @click="openPreview(row)"
+            >
+              预览
+            </el-button>
             <el-button
               v-if="row.status === 'failed' || row.status === 'processing'"
               type="primary"
@@ -222,6 +230,36 @@
         <el-button @click="showUploadDialog = false">关闭</el-button>
       </template>
     </el-dialog>
+
+    <!-- 文档预览抽屉 -->
+    <el-drawer
+      v-model="showPreviewDrawer"
+      :title="previewData ? `预览: ${previewData.document.filename}` : '预览'"
+      size="600px"
+      destroy-on-close
+    >
+      <div v-loading="previewLoading" class="preview-container">
+        <template v-if="previewData && previewData.chunks.length > 0">
+          <div class="preview-meta">
+            <span>文件大小：{{ previewData.document.size }}</span>
+            <span>共 {{ previewData.chunks.length }} 个片段</span>
+          </div>
+          <div
+            v-for="(chunk, i) in previewData.chunks"
+            :key="i"
+            class="chunk-block"
+          >
+            <div class="chunk-header">
+              片段 {{ chunk.chunk_index + 1 }}/{{ chunk.chunk_total || previewData.chunks.length }}
+            </div>
+            <div class="chunk-content">{{ chunk.content }}</div>
+          </div>
+        </template>
+        <div v-else-if="!previewLoading" class="preview-empty">
+          暂无内容
+        </div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -236,7 +274,9 @@ import {
   batchDeleteDocuments,
   reindexDocument,
   getDocumentStatuses,
+  getDocumentChunks,
   type DocumentItem,
+  type DocumentChunksResponse,
 } from '../api/document'
 import {
   buildAcceptAttr,
@@ -289,6 +329,24 @@ const docTableRef = ref<any>(null)
 
 const clearTableSelection = () => {
   docTableRef.value?.clearSelection()
+}
+
+// ---- 文档预览 ----
+
+const showPreviewDrawer = ref(false)
+const previewLoading = ref(false)
+const previewData = ref<DocumentChunksResponse | null>(null)
+
+const openPreview = async (row: DocumentItem) => {
+  previewLoading.value = true
+  showPreviewDrawer.value = true
+  try {
+    previewData.value = await getDocumentChunks(row.id)
+  } catch {
+    previewData.value = null
+  } finally {
+    previewLoading.value = false
+  }
 }
 
 // ---- 上传限制 ----
@@ -993,5 +1051,54 @@ const retryDoc = async (id: number) => {
 
 .queue-item--success {
   background: #f6ffed;
+}
+
+/* ---- 文档预览 ---- */
+
+.preview-container {
+  padding: 0 4px;
+}
+
+.preview-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: #999;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #eee;
+}
+
+.chunk-block {
+  margin-bottom: 20px;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.chunk-header {
+  padding: 6px 14px;
+  background: #e6f4ff;
+  color: #1677ff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chunk-content {
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #333;
+}
+
+.preview-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: #999;
+  font-size: 14px;
 }
 </style>

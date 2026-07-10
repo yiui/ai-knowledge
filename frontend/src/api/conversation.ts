@@ -72,10 +72,21 @@ export interface StreamDoneMeta {
   should_start_new: boolean
 }
 
+export interface SourceMeta {
+  filename: string
+  chunk_index: number
+  chunk_total: number
+}
+
+export interface StreamSources {
+  sources: SourceMeta[]
+}
+
 export const chatStreamInConversation = async (
   conversationId: number,
   question: string,
   onChunk: (text: string) => void,
+  onSources?: (sources: SourceMeta[]) => void,
   onDone?: (meta: StreamDoneMeta) => void,
 ): Promise<void> => {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -121,7 +132,10 @@ export const chatStreamInConversation = async (
       const data = line.slice(6).trim()
       if (data === '[DONE]') return
 
-      const parsed = JSON.parse(data) as { text?: string; done?: boolean }
+      const parsed = JSON.parse(data) as { text?: string; done?: boolean; sources?: SourceMeta[] }
+      if (parsed.sources && onSources) {
+        onSources(parsed.sources)
+      }
       if (parsed.text) {
         onChunk(parsed.text)
       }

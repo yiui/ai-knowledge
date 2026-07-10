@@ -90,3 +90,24 @@ export const batchDeleteDocuments = async (ids: number[]) => {
   const res = await http.post('/documents/batch-delete', { ids })
   return res.data
 }
+
+export interface DocumentChunk {
+  chunk_index: number
+  chunk_total: number
+  content: string
+}
+
+export interface DocumentChunksResponse {
+  document: {
+    id: number
+    filename: string
+    size: string
+    status: string
+  }
+  chunks: DocumentChunk[]
+}
+
+export const getDocumentChunks = async (docId: number): Promise<DocumentChunksResponse> => {
+  const res = await http.get<DocumentChunksResponse>(`/documents/${docId}/chunks`)
+  return res.data
+}

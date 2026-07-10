@@ -12,7 +12,7 @@ from app.models.user import User
 from app.services.document_service import save_file
 from app.services.ingest_service import process_document
 from app.services.knowledge_base_service import get_user_knowledge_base
-from app.services.vector_service import delete_document_vectors
+from app.services.vector_service import delete_document_vectors, get_document_chunks
 
 router = APIRouter()
 
@@ -308,6 +308,36 @@ def batch_delete_documents(
     db.commit()
 
     return {"message": f"已删除 {deleted} 个文档", "deleted": deleted}
+
+
+@router.get("/documents/{doc_id}/chunks")
+def document_chunks(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """返回文档的所有 chunk，按 chunk_index 排序，用于预览。"""
+    doc = (
+        db.query(Document)
+        .filter(
+            Document.id == doc_id,
+            Document.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+
+    chunks = get_document_chunks(doc.id, doc.knowledge_base_id, current_user.id)
+    return {
+        "document": {
+            "id": doc.id,
+            "filename": doc.filename,
+            "size": format_size(doc.size),
+            "status": doc.status,
+        },
+        "chunks": chunks,
+    }
 
 
 def format_size(size: int) -> str:

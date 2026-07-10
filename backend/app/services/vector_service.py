@@ -185,6 +185,39 @@ def get_adjacent_chunks(
     return adjacent
 
 
+def get_document_chunks(
+    document_id: int,
+    knowledge_base_id: int,
+    user_id: int,
+) -> list[dict]:
+    """返回文档的所有 chunk，按 chunk_index 排序。用于预览。"""
+    from app.db.session import engine
+    from sqlalchemy import text
+
+    with engine.connect() as conn:
+        result = conn.execute(
+            text("""
+                SELECT document, cmetadata
+                FROM langchain_pg_embedding
+                WHERE cmetadata->>'document_id' = :doc_id
+                  AND cmetadata->>'knowledge_base_id' = :kb_id
+                  AND cmetadata->>'user_id' = :uid
+                ORDER BY (cmetadata->>'chunk_index')::int ASC
+            """),
+            {"doc_id": str(document_id), "kb_id": str(knowledge_base_id), "uid": str(user_id)},
+        )
+        rows = result.fetchall()
+
+    return [
+        {
+            "chunk_index": (row[1] or {}).get("chunk_index", i),
+            "chunk_total": (row[1] or {}).get("chunk_total", len(rows)),
+            "content": row[0],
+        }
+        for i, row in enumerate(rows)
+    ]
+
+
 def delete_document_vectors(document_id: int, knowledge_base_id: int):
     # 确保 PGVector 表已创建（首次调用时建表）
     _get_vector_store()

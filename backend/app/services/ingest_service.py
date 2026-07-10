@@ -41,6 +41,8 @@ def _do_process_document(
             chunk.metadata["document_id"] = document_id
             chunk.metadata["user_id"] = str(user_id)
             chunk.metadata["knowledge_base_id"] = str(knowledge_base_id)
+            if filename:
+                chunk.metadata["filename"] = filename
 
         inserted = upsert_document_vectors(
             chunks=chunks,

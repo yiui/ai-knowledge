@@ -77,7 +77,19 @@
             :key="msg.id ?? msg.localKey"
             :class="['msg-row', msg.role]"
           >
-            <div class="bubble">{{ msg.content }}</div>
+            <div class="msg-wrapper">
+              <div v-if="msg.sources && msg.sources.length > 0" class="sources-bar">
+                <span class="sources-label">📄 来源：</span>
+                <span
+                  v-for="(src, i) in msg.sources"
+                  :key="i"
+                  class="source-tag"
+                >
+                  {{ src.filename }}{{ src.chunk_total > 0 ? ` (片段 ${src.chunk_index + 1}/${src.chunk_total})` : '' }}
+                </span>
+              </div>
+              <div class="bubble">{{ msg.content }}</div>
+            </div>
           </div>
         </div>
 
@@ -218,6 +230,9 @@ const send = async () => {
       q,
       (chunk) => {
         messages.value[assistantIndex].content += chunk
+      },
+      (sources) => {
+        messages.value[assistantIndex].sources = sources
       },
       (meta) => {
         messageCount.value = meta.message_count
@@ -402,8 +417,41 @@ onMounted(async () => {
   justify-content: flex-start;
 }
 
-.bubble {
+.msg-wrapper {
   max-width: 75%;
+  display: flex;
+  flex-direction: column;
+}
+
+.sources-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+  padding: 4px 0;
+}
+
+.sources-label {
+  font-size: 11px;
+  color: #999;
+  flex-shrink: 0;
+}
+
+.source-tag {
+  display: inline-block;
+  font-size: 11px;
+  padding: 1px 8px;
+  background: #e6f4ff;
+  color: #1677ff;
+  border-radius: 10px;
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bubble {
   padding: 10px 14px;
   border-radius: 12px;
   line-height: 1.5;

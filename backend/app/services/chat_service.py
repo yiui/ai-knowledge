@@ -1,8 +1,31 @@
 from collections.abc import Iterator
+from typing import Union
 
 from app.core.config import settings
 from app.core.llm import ask_llm, stream_llm
 from app.services.vector_service import search_hybrid, search_similar, get_adjacent_chunks
+
+
+def _extract_source_meta(docs: list) -> list[dict]:
+    """从 LangChain Document 列表中提取来源元数据。"""
+    seen = set()
+    sources: list[dict] = []
+    for d in docs:
+        filename = d.metadata.get("filename", "")
+        chunk_index = d.metadata.get("chunk_index")
+        chunk_total = d.metadata.get("chunk_total")
+        key = (filename, chunk_index)
+        if key in seen:
+            continue
+        seen.add(key)
+        sources.append({
+            "filename": filename,
+            "chunk_index": chunk_index if chunk_index is not None else 0,
+            "chunk_total": chunk_total if chunk_total is not None else 0,
+        })
+    # 按文件名 + 片段号排序
+    sources.sort(key=lambda s: (s["filename"], s["chunk_index"]))
+    return sources
 
 
 class ChatService:
@@ -88,7 +111,7 @@ class ChatService:
 
 如果上下文没有答案，请回答"未找到相关信息"。
 """
-        return prompt, docs
+        return prompt, all_docs
 
     def chat(
         self,
@@ -116,14 +139,17 @@ class ChatService:
         question: str,
         user_id: int,
         knowledge_base_id: int | None = None,
-    ) -> Iterator[str]:
+    ) -> Iterator[Union[dict, str]]:
+        """流式对话。有知识库时首个事件为 {"sources": [...]}，后续为文本 chunk。"""
         if knowledge_base_id is None:
             prompt = self._build_direct_prompt(question, stream=True)
+            yield from stream_llm(prompt)
         else:
-            prompt, _docs = self._build_rag_prompt(
+            prompt, docs = self._build_rag_prompt(
                 question,
                 user_id,
                 knowledge_base_id,
                 stream=True,
             )
-        yield from stream_llm(prompt)
+            yield {"sources": _extract_source_meta(docs)}
+            yield from stream_llm(prompt)

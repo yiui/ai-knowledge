@@ -56,8 +56,11 @@ def chat_stream(
     )
 
     def event_generator():
-        for chunk in chat_service.chat_stream(question, current_user.id, kb_id):
-            yield f"data: {json.dumps({'text': chunk})}\n\n"
+        for item in chat_service.chat_stream(question, current_user.id, kb_id):
+            if isinstance(item, dict):
+                yield f"data: {json.dumps(item)}\n\n"
+            else:
+                yield f"data: {json.dumps({'text': item})}\n\n"
 
         yield "data: [DONE]\n\n"
 
