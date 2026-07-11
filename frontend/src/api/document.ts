@@ -103,6 +103,13 @@ export interface DocumentChunk {
   content_length: number
 }
 
+export interface ChunkPage {
+  items: DocumentChunk[]
+  total: number
+  page: number
+  page_size: number
+}
+
 export interface DocumentChunksResponse {
   document: {
     id: number
@@ -110,10 +117,16 @@ export interface DocumentChunksResponse {
     size: string
     status: string
   }
-  chunks: DocumentChunk[]
+  chunks: ChunkPage
 }
 
-export const getDocumentChunks = async (docId: number): Promise<DocumentChunksResponse> => {
-  const res = await http.get<DocumentChunksResponse>(`/documents/${docId}/chunks`)
+export const getDocumentChunks = async (
+  docId: number,
+  page = 1,
+  pageSize = 20,
+): Promise<DocumentChunksResponse> => {
+  const res = await http.get<DocumentChunksResponse>(`/documents/${docId}/chunks`, {
+    params: { page, page_size: pageSize },
+  })
   return res.data
 }

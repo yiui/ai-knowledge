@@ -242,25 +242,38 @@
     <el-drawer
       v-model="showPreviewDrawer"
       :title="previewData ? `预览: ${previewData.document.filename}` : '预览'"
-      size="600px"
+      size="1000px"
       destroy-on-close
     >
       <div v-loading="previewLoading" class="preview-container">
-        <template v-if="previewData && previewData.chunks.length > 0">
+        <template v-if="previewData && previewData.chunks.items.length > 0">
           <div class="preview-meta">
             <span>文件大小：{{ previewData.document.size }}</span>
-            <span>共 {{ previewData.chunks.length }} 个片段</span>
+            <span>共 {{ previewData.chunks.total }} 个片段</span>
           </div>
           <div
-            v-for="(chunk, i) in previewData.chunks"
+            v-for="(chunk, i) in previewData.chunks.items"
             :key="i"
             class="chunk-block"
           >
             <div class="chunk-header">
-              片段 {{ chunk.chunk_index + 1 }}/{{ chunk.chunk_total || previewData.chunks.length }}
+              片段 {{ chunk.chunk_index + 1 }}/{{ chunk.chunk_total || previewData.chunks.total }}
               <span class="chunk-header__len">({{ chunk.content_length ?? chunk.content.length }} 字符)</span>
             </div>
             <div class="chunk-content">{{ chunk.content }}</div>
+          </div>
+          <div class="preview-pagination">
+            <el-pagination
+              v-model:current-page="previewPage"
+              v-model:page-size="previewPageSize"
+              :total="previewData.chunks.total"
+              :page-sizes="[10, 20, 50]"
+              layout="total, sizes, prev, pager, next"
+              background
+              small
+              @current-change="onPreviewPageChange"
+              @size-change="onPreviewPageSizeChange"
+            />
           </div>
         </template>
         <div v-else-if="!previewLoading" class="preview-empty">
@@ -346,17 +359,41 @@ const clearTableSelection = () => {
 const showPreviewDrawer = ref(false)
 const previewLoading = ref(false)
 const previewData = ref<DocumentChunksResponse | null>(null)
+const previewPage = ref(1)
+const previewPageSize = ref(20)
+const previewDocId = ref<number | null>(null)
 
 const openPreview = async (row: DocumentItem) => {
+  previewDocId.value = row.id
+  previewPage.value = 1
   previewLoading.value = true
   showPreviewDrawer.value = true
+  await loadPreviewChunks()
+}
+
+const loadPreviewChunks = async () => {
+  if (previewDocId.value == null) return
+  previewLoading.value = true
   try {
-    previewData.value = await getDocumentChunks(row.id)
+    previewData.value = await getDocumentChunks(
+      previewDocId.value,
+      previewPage.value,
+      previewPageSize.value,
+    )
   } catch {
     previewData.value = null
   } finally {
     previewLoading.value = false
   }
+}
+
+const onPreviewPageChange = () => {
+  loadPreviewChunks()
+}
+
+const onPreviewPageSizeChange = () => {
+  previewPage.value = 1
+  loadPreviewChunks()
 }
 
 // ---- 上传限制 ----
@@ -1132,6 +1169,14 @@ const retryDoc = async (id: number) => {
   white-space: pre-wrap;
   word-break: break-word;
   color: #333;
+}
+
+.preview-pagination {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0 4px;
+  border-top: 1px solid #eee;
+  margin-top: 16px;
 }
 
 .preview-empty {

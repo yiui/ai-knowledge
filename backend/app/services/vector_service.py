@@ -189,13 +189,33 @@ def get_document_chunks(
     document_id: int,
     knowledge_base_id: int,
     user_id: int,
-) -> list[dict]:
-    """返回文档的所有 chunk，按 chunk_index 排序。用于预览。"""
+    page: int = 1,
+    page_size: int = 20,
+) -> dict:
+    """返回文档的分块，按 chunk_index 排序，支持分页。用于预览。"""
     from app.db.session import engine
     from sqlalchemy import text
 
+    params = {
+        "doc_id": str(document_id),
+        "kb_id": str(knowledge_base_id),
+        "uid": str(user_id),
+    }
+
     with engine.connect() as conn:
-        result = conn.execute(
+        total = conn.execute(
+            text("""
+                SELECT COUNT(*)
+                FROM langchain_pg_embedding
+                WHERE cmetadata->>'document_id' = :doc_id
+                  AND cmetadata->>'knowledge_base_id' = :kb_id
+                  AND cmetadata->>'user_id' = :uid
+            """),
+            params,
+        ).scalar()
+
+        offset = (page - 1) * page_size
+        rows = conn.execute(
             text("""
                 SELECT document, cmetadata
                 FROM langchain_pg_embedding
@@ -203,20 +223,27 @@ def get_document_chunks(
                   AND cmetadata->>'knowledge_base_id' = :kb_id
                   AND cmetadata->>'user_id' = :uid
                 ORDER BY (cmetadata->>'chunk_index')::int ASC
+                LIMIT :limit OFFSET :offset
             """),
-            {"doc_id": str(document_id), "kb_id": str(knowledge_base_id), "uid": str(user_id)},
-        )
-        rows = result.fetchall()
+            {**params, "limit": page_size, "offset": offset},
+        ).fetchall()
 
-    return [
+    items = [
         {
-            "chunk_index": (row[1] or {}).get("chunk_index", i),
-            "chunk_total": (row[1] or {}).get("chunk_total", len(rows)),
+            "chunk_index": (row[1] or {}).get("chunk_index", offset + i),
+            "chunk_total": (row[1] or {}).get("chunk_total", total),
             "content": row[0],
             "content_length": len(row[0]) if row[0] else 0,
         }
         for i, row in enumerate(rows)
     ]
+
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
 
 
 def delete_document_vectors(document_id: int, knowledge_base_id: int):
