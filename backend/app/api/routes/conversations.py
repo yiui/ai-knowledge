@@ -1,4 +1,5 @@
 import json
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -214,7 +215,6 @@ def chat_stream_in_conversation(
                     chunks.append(item)
                     yield f"data: {json.dumps({'text': item})}\n\n"
         except Exception as exc:  # noqa: BLE001
-            import logging
             logging.getLogger("chat").exception("stream failed")
             err_msg = f"请求失败: {exc}"
             yield f"data: {json.dumps({'text': err_msg})}\n\n"

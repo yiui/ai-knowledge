@@ -1,14 +1,15 @@
+import logging
 from pathlib import Path
-from pypdf import PdfReader
+
 from langchain_community.document_loaders import PyMuPDFLoader
+from pypdf import PdfReader
+
+log = logging.getLogger("parser")
+log_ocr = logging.getLogger("ocr")
 
 
 def parse_pdf(file_path: str) -> list[str]:
-    """
-    返回每页文本
-    """
-    import logging
-    log = logging.getLogger("parser")
+    """返回每页文本"""
 
     try:
         # 1. 先抽文本
@@ -31,7 +32,7 @@ def parse_pdf(file_path: str) -> list[str]:
 
     # 3. 最终兜底过滤
     pages = [p.strip() for p in pages if p and p.strip()]
-    print("parse over")
+    log.info("parse over, %d pages", len(pages))
     return pages
 
 
@@ -112,7 +113,6 @@ def extract_pdf_text(file_path: str) -> list[str]:
     for doc in docs:
         text = doc.page_content or ""
         text = text.strip()
-        # print("text:", text)    
         if text:
             pages.append(text)
 
@@ -143,13 +143,10 @@ def run_ocr(file_path: str) -> list[str]:
     OCR 识别。逐页处理以免 2C4G 小机器内存溢出。
     """
     import gc
-    import logging
 
     from PIL import Image
     from rapidocr_onnxruntime import RapidOCR
     from pdf2image import convert_from_path
-
-    log = logging.getLogger("ocr")
 
     # 限制单张图片最大像素（宽×高），防止超大页面撑爆内存
     # 4000×4000 = 16MP，对 OCR 足够了
@@ -161,7 +158,7 @@ def run_ocr(file_path: str) -> list[str]:
     MAX_OCR_PAGES = 50
     process_count = min(total_pages, MAX_OCR_PAGES)
     if total_pages > MAX_OCR_PAGES:
-        log.warning(
+        log_ocr.warning(
             "PDF has %d pages, only OCR first %d to conserve memory",
             total_pages, MAX_OCR_PAGES,
         )
@@ -197,12 +194,12 @@ def run_ocr(file_path: str) -> list[str]:
                     pages.append(text)
 
             except MemoryError:
-                log.exception(
+                log_ocr.exception(
                     "OOM at page %d/%d, skip remaining pages", page_num, process_count,
                 )
                 break
             except Exception:
-                log.exception("OCR page %d/%d failed", page_num, process_count)
+                log_ocr.exception("OCR page %d/%d failed", page_num, process_count)
     finally:
         del ocr
         gc.collect()

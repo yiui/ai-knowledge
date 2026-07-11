@@ -4,6 +4,8 @@
   `_migrate_documents_status_columns` 检测并 ALTER 已有 documents 表。
 - 真正的 schema 版本演进建议后续接 Alembic（pyproject.toml 已含 alembic 依赖）。
 """
+import logging
+
 from sqlalchemy import inspect, text
 
 from app.db.base import Base
@@ -11,6 +13,8 @@ from app.db.session import engine
 
 # 导入模型（关键，不然不会建表）
 from app.models import conversation, document, knowledge_base, message, user  # noqa: F401
+
+log = logging.getLogger("init_db")
 
 
 def _migrate_users_table() -> None:
@@ -23,9 +27,9 @@ def _migrate_users_table() -> None:
     # 如果缺核心列，说明是极老的结构，打印警告让人工处理（不再自动 DROP）
     missing = {"username", "password_hash"} - columns
     if missing:
-        print(
-            f"[init_db] WARNING: users table missing columns {missing}, "
-            f"please migrate manually"
+        log.warning(
+            "users table missing columns %s, please migrate manually",
+            missing,
         )
 
 

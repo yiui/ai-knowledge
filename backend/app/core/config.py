@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     APP_NAME: str
     APP_VERSION: str
     DEBUG: bool
+    LOG_LEVEL: str = "INFO"
 
     LLM_PROVIDER: LLMProvider
 

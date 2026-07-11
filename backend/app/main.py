@@ -1,3 +1,4 @@
+from app.core.logging_config import setup_logging
 from app.db.init_db import init_db
 from fastapi import FastAPI
 from app.api.routes.llm import router as llm_router
@@ -13,11 +14,12 @@ from app.api.routes.conversations import router as conversations_router
 from sqlalchemy import text
 from app.db.session import SessionLocal, engine
 from app.models.document import Document
-from datetime import datetime, timedelta,timezone
+from datetime import datetime, timedelta, timezone
 import threading
 import time
 import logging
 
+setup_logging(settings.LOG_LEVEL)
 log = logging.getLogger("startup")
 
 app = FastAPI(

@@ -1,10 +1,12 @@
 import json
+import logging
 from collections.abc import Iterator
 
 import httpx
 
 from app.core.config import settings
 
+log = logging.getLogger("deepseek")
 _client: httpx.Client | None = None
 
 
@@ -47,8 +49,6 @@ def ask_deepseek(prompt: str) -> str:
 
 
 def stream_deepseek(prompt: str) -> Iterator[str]:
-    import logging
-    log = logging.getLogger("deepseek")
     with _get_client().stream(
         "POST",
         "/chat/completions",
