@@ -21,10 +21,20 @@ def parse_pdf(file_path: str) -> list[str]:
         log.exception("PDF text extraction failed")
         pages = []
 
+    total_chars = sum(len(p.strip()) for p in pages)
+    log.info(
+        "text extraction: %d pages, %d total chars, avg %.0f chars/page",
+        len(pages), total_chars,
+        total_chars / len(pages) if pages else 0,
+    )
+
     # 2. 如果文本质量差 → OCR
-    if not is_text_valid(pages):
+    text_valid = is_text_valid(pages)
+    log.info("text valid=%s, will%s run OCR", text_valid, " not" if text_valid else "")
+    if not text_valid:
         try:
             pages = run_ocr(file_path)
+            log.info("OCR produced %d pages", len(pages))
         except MemoryError:
             log.exception("PDF OCR OOM, returning whatever we have")
         except Exception:
@@ -32,7 +42,9 @@ def parse_pdf(file_path: str) -> list[str]:
 
     # 3. 最终兜底过滤
     pages = [p.strip() for p in pages if p and p.strip()]
-    log.info("parse over, %d pages", len(pages))
+    log.info("parse over, %d pages after filtering", len(pages))
+    for i, page in enumerate(pages):
+        log.debug("page %d preview (first 80 chars): %s", i, page[:80])
     return pages
 
 
@@ -125,8 +137,16 @@ def is_text_valid(pages: list[str]) -> bool:
 
     total_chars = sum(len(p.strip()) for p in pages)
 
-    # 太少说明是图片PDF
-    return total_chars > 50
+    # 总字符数太少 → 图片 PDF
+    if total_chars <= 50:
+        return False
+
+    # 平均每页字符数过低 → 碎片文本（课件类 PDF），强制走 OCR
+    avg_chars = total_chars / len(pages)
+    if avg_chars < 30:
+        return False
+
+    return True
 
 
 def _get_pdf_page_count(file_path: str) -> int:

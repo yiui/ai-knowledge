@@ -258,6 +258,7 @@
           >
             <div class="chunk-header">
               片段 {{ chunk.chunk_index + 1 }}/{{ chunk.chunk_total || previewData.chunks.length }}
+              <span class="chunk-header__len">({{ chunk.content_length ?? chunk.content.length }} 字符)</span>
             </div>
             <div class="chunk-content">{{ chunk.content }}</div>
           </div>
@@ -1113,6 +1114,15 @@ const retryDoc = async (id: number) => {
   color: #1677ff;
   font-size: 12px;
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chunk-header__len {
+  font-weight: 400;
+  font-size: 11px;
+  color: #91caff;
 }
 
 .chunk-content {

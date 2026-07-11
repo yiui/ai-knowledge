@@ -213,6 +213,7 @@ def get_document_chunks(
             "chunk_index": (row[1] or {}).get("chunk_index", i),
             "chunk_total": (row[1] or {}).get("chunk_total", len(rows)),
             "content": row[0],
+            "content_length": len(row[0]) if row[0] else 0,
         }
         for i, row in enumerate(rows)
     ]
