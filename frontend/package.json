@@ -4,11 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "run-p dev-vite dev-typecheck",
+    "dev-vite": "vite",
+    "dev-typecheck": "vue-tsc --watch --noEmit",
     "build": "run-p type-check \"build-only {@}\" --",
     "preview": "vite preview",
     "build-only": "vite build",
-    "type-check": "vue-tsc --build"
+    "type-check": "vue-tsc --build",
+    "check": "vue-tsc --noEmit"
   },
   "dependencies": {
     "axios": "^1.16.1",
