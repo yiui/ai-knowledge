@@ -100,6 +100,7 @@ export interface DocumentChunk {
   chunk_index: number
   chunk_total: number
   content: string
+  content_length: number
 }
 
 export interface DocumentChunksResponse {
