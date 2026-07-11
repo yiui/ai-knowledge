@@ -11,63 +11,41 @@
       <el-button size="small" @click="refreshDocs">刷新</el-button>
     </div>
 
-    <!-- 搜索栏 -->
-    <div class="search-bar">
-      <el-input
-        v-model="searchText"
-        placeholder="搜索文件名..."
-        size="small"
-        clearable
-        class="search-bar__input"
-        @keyup.enter="handleSearch"
-        @clear="handleSearch"
-      >
-        <template #prefix>
-          <span>🔍</span>
-        </template>
-      </el-input>
-      <el-select
-        v-model="statusFilter"
-        placeholder="状态筛选"
-        size="small"
-        clearable
-        style="width: 130px"
-        @change="handleSearch"
-      >
-        <el-option label="全部状态" value="" />
-        <el-option label="就绪" value="ready" />
-        <el-option label="处理中" value="processing" />
-        <el-option label="等待处理" value="pending" />
-        <el-option label="失败" value="failed" />
-      </el-select>
-    </div>
-
-    <!-- 操作栏：上传 + 批量（固定高度，表格不跳动） -->
-    <div class="action-bar">
-      <el-button type="primary" size="small" @click="openUploadDialog">
-        📤 上传文档
-      </el-button>
-      <div v-if="selectedDocs.length > 0" class="action-bar__batch">
-        <span class="action-bar__info">
-          已选 <strong>{{ selectedDocs.length }}</strong> 项
-        </span>
+    <!-- 工具栏：搜索 + 筛选 + 上传 + 批量（合并为一行） -->
+    <div class="toolbar-row">
+      <div class="toolbar-row__left">
+        <el-input
+          v-model="searchText"
+          placeholder="搜索文件名..."
+          size="small"
+          clearable
+          style="width: 220px"
+          @keyup.enter="handleSearch"
+          @clear="handleSearch"
+        >
+          <template #prefix><span>🔍</span></template>
+        </el-input>
+        <el-select
+          v-model="statusFilter"
+          placeholder="状态筛选"
+          size="small"
+          clearable
+          style="width: 130px"
+          @change="handleSearch"
+        >
+          <el-option label="全部状态" value="" />
+          <el-option label="就绪" value="ready" />
+          <el-option label="处理中" value="processing" />
+          <el-option label="等待处理" value="pending" />
+          <el-option label="失败" value="failed" />
+        </el-select>
+        <el-button type="primary" size="small" @click="openUploadDialog">📤 上传文档</el-button>
+      </div>
+      <div v-if="selectedDocs.length > 0" class="toolbar-row__right">
+        <span class="action-bar__info">已选 <strong>{{ selectedDocs.length }}</strong> 项</span>
         <el-button size="small" @click="clearTableSelection">取消选择</el-button>
-        <el-button
-          type="warning"
-          size="small"
-          :loading="batchReindexing"
-          @click="handleBatchReindex"
-        >
-          重新处理
-        </el-button>
-        <el-button
-          type="danger"
-          size="small"
-          :loading="batchDeleting"
-          @click="handleBatchDelete"
-        >
-          批量删除
-        </el-button>
+        <el-button type="warning" size="small" :loading="batchReindexing" @click="handleBatchReindex">重新处理</el-button>
+        <el-button type="danger" size="small" :loading="batchDeleting" @click="handleBatchDelete">批量删除</el-button>
       </div>
     </div>
 
@@ -841,6 +819,7 @@ const retryDoc = async (id: number) => {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  background: #f8f9fb;
 }
 
 /* ---- 头栏 ---- */
@@ -849,61 +828,56 @@ const retryDoc = async (id: number) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 20px;
-  border-bottom: 1px solid #eee;
+  padding: 16px 24px;
+  background: #fff;
+  border-bottom: 1px solid #edf0f4;
   flex-shrink: 0;
 }
 
 .doc-header__left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
 }
 
 .doc-header__title {
   margin: 0;
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
+  color: #1d1f24;
 }
 
 .doc-header__count {
   font-size: 13px;
-  color: #666;
+  color: #a0a4ac;
 }
 
 .doc-header__count strong {
   font-weight: 600;
-  color: #333;
+  color: #4e5158;
 }
 
-/* ---- 搜索栏 ---- */
+/* ---- 工具栏（搜索 + 操作合一行） ---- */
 
-.search-bar {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 10px 20px;
-  border-bottom: 1px solid #eee;
-  flex-shrink: 0;
-}
-
-.search-bar__input {
-  width: 320px;
-}
-
-/* ---- 操作栏 ---- */
-
-.action-bar {
+.toolbar-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 20px;
-  border-bottom: 1px solid #eee;
+  padding: 10px 24px;
+  background: #fff;
+  border-bottom: 1px solid #edf0f4;
   flex-shrink: 0;
-  min-height: 40px;
+  min-height: 44px;
+  gap: 12px;
 }
 
-.action-bar__batch {
+.toolbar-row__left {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.toolbar-row__right {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -921,11 +895,18 @@ const retryDoc = async (id: number) => {
 .doc-table {
   flex: 1;
   font-size: 13px;
+  background: #fff;
 }
 
 .doc-table :deep(th) {
   font-weight: 600;
-  color: #555;
+  color: #6b7080;
+  background: #fafbfc !important;
+  border-bottom: 1px solid #edf0f4 !important;
+}
+
+.doc-table :deep(td) {
+  border-bottom: 1px solid #f3f5f8 !important;
 }
 
 .doc-filename {
@@ -989,10 +970,10 @@ const retryDoc = async (id: number) => {
 /* ---- 分页 ---- */
 
 .doc-pagination {
-  padding: 10px 20px;
+  padding: 12px 24px;
   display: flex;
   justify-content: flex-end;
-  border-top: 1px solid #eee;
+  border-top: 1px solid #edf0f4;
   flex-shrink: 0;
   background: #fff;
 }

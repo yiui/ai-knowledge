@@ -89,6 +89,7 @@ export const chatStreamInConversation = async (
   onChunk: (text: string) => void,
   onSources?: (sources: SourceMeta[]) => void,
   onDone?: (meta: StreamDoneMeta) => void,
+  signal?: AbortSignal,
 ): Promise<void> => {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   const token = getToken()
@@ -102,6 +103,7 @@ export const chatStreamInConversation = async (
       method: 'POST',
       headers,
       body: JSON.stringify({ question }),
+      signal,
     },
   )
 

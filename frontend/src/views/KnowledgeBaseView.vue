@@ -135,12 +135,15 @@ onMounted(loadKbs)
   flex: 1;
   display: flex;
   overflow: hidden;
+  background: #f8f9fb;
 }
 
 .kb-sidebar {
   width: 260px;
-  border-right: 1px solid #eee;
-  padding: 16px;
+  border-right: 1px solid #edf0f4;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
   overflow: auto;
   flex-shrink: 0;
 }
@@ -149,22 +152,26 @@ onMounted(loadKbs)
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  padding: 16px;
 }
 
 .sidebar-header h2 {
   margin: 0;
   font-size: 16px;
+  font-weight: 700;
+  color: #1d1f24;
 }
 
 .empty-tip {
-  color: #999;
-  font-size: 14px;
+  padding: 32px 16px;
+  color: #a0a4ac;
+  font-size: 13px;
+  text-align: center;
 }
 
 .kb-list {
   list-style: none;
-  padding: 0;
+  padding: 0 8px 8px;
   margin: 0;
 }
 
@@ -173,19 +180,14 @@ onMounted(loadKbs)
   justify-content: space-between;
   align-items: center;
   padding: 10px 12px;
-  border-radius: 6px;
+  border-radius: 10px;
   cursor: pointer;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+  transition: all 0.15s ease;
 }
 
-.kb-list li:hover {
-  background: #f5f7fa;
-}
-
-.kb-list li.active {
-  background: #e6f4ff;
-  color: #1677ff;
-}
+.kb-list li:hover { background: #f3f5f8; }
+.kb-list li.active { background: #eef4ff; color: #1677ff; }
 
 .kb-name {
   overflow: hidden;
@@ -193,6 +195,8 @@ onMounted(loadKbs)
   white-space: nowrap;
   flex: 1;
   margin-right: 8px;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .kb-main {

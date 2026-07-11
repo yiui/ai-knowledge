@@ -20,7 +20,7 @@ function loadUser(): AuthUser | null {
 }
 
 const token = ref<string | null>(localStorage.getItem(TOKEN_KEY))
-const user = ref<AuthUser | null>(loadUser())
+export const user = ref<AuthUser | null>(loadUser())
 export const sessionValidated = ref(false)
 
 export const isLoggedIn = computed(() => Boolean(token.value))
